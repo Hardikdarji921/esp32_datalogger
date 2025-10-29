@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Global Telematics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #111827;
+      }
+      #map,
+      #detail-map {
+        border-radius: 0.5rem;
+      }
+      #map {
+        height: calc(100vh - 150px);
+      }
+      .leaflet-popup-content-wrapper,
+      .leaflet-popup-tip {
+        background: #1f2937;
+        color: #e5e7eb;
+      }
+      button,
+      a {
+        transition: all 0.2s ease-in-out;
+      }
+    </style>
+  </head>
+  <body class="text-gray-200 min-h-screen flex flex-col">
+    <div class="relative z-10 flex-grow flex flex-col">
+      <div class="p-4 sm:p-6 flex-grow flex flex-col">
+        <header class="mb-6 flex justify-between items-center">
+          <div>
+            <h1 id="main-title" class="text-3xl font-bold text-white">
+              Global Overview
+            </h1>
+            <p id="main-subtitle" class="text-gray-400">
+              Welcome to your global overview
+            </p>
+          </div>
+          <div class="relative">
+            <button
+              id="profile-btn"
+              class="flex items-center space-x-2 p-2 bg-gray-700 rounded-lg hover:bg-gray-600 focus:outline-none"
+            >
+              <span
+                id="greeting-span"
+                class="text-white font-medium px-2"
+              ></span>
+              <svg
+                class="w-5 h-5 text-gray-400"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </button>
+            <div
+              id="profile-dropdown"
+              class="hidden absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20"
+            >
+              <div class="py-1">
+                <a
+                  href="profile.html"
+                  class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                  >Your Profile</a
+                >
+                <a
+                  href="contact.html"
+                  class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                  >Contact Us</a
+                >
+                <a
+                  href="#"
+                  id="logout-btn"
+                  class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                  >Logout</a
+                >
+              </div>
+            </div>
+          </div>
+        </header>
+        <main id="global-overview">
+          <div class="flex flex-col lg:flex-row gap-6">
+            <div class="lg:w-2/3 w-full">
+              <div id="map"></div>
+            </div>
+            <div class="lg:w-1/3 w-full bg-gray-800 p-4 rounded-lg">
+              <h2 class="text-xl font-semibold mb-4 text-white">Device List</h2>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                  <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                    <tr>
+                      <th class="px-4 py-3">Machine Name</th>
+                      <th class="px-4 py-3">Status</th>
+                      <th class="px-4 py-3">Engine Hours</th>
+                      <th class="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="device-list-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </main>
+        <section id="device-detail-view" class="hidden flex-grow flex flex-col">
+          <div class="flex justify-between items-center mb-4">
+            <button
+              id="back-to-overview-btn"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                /></svg
+              >Back to Overview
+            </button>
+            <div class="text-right">
+              <p class="text-sm text-gray-400">
+                SPACE: <span id="detail-space"></span> | STATUS:
+                <span id="detail-status" class="font-bold"></span>
+              </p>
+            </div>
+          </div>
+          <div class="bg-gray-800 p-4 rounded-lg mb-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-semibold text-white">Vehicle Parameters</h3>
+              <button
+                id="edit-params-btn"
+                class="text-sm bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg"
+              >
+                Edit Parameters
+              </button>
+            </div>
+            <div
+              id="vehicle-params-grid"
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-center"
+            ></div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-grow">
+            <div class="space-y-6 flex flex-col">
+              <div
+                class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-800 p-4 rounded-lg"
+              >
+                <div class="flex flex-col items-center justify-center p-2">
+                  <img
+                    id="vehicle-image"
+                    src="https://via.placeholder.com/400x300.png/1F2937/FFFFFF?text=Vehicle+Image"
+                    alt="Vehicle Image"
+                    class="rounded-lg object-contain w-4/5 h-auto"
+                  />
+                </div>
+                <div>
+                  <h4
+                    class="font-semibold text-white mb-2"
+                    id="detail-logger-title"
+                  >
+                    Logger Status
+                  </h4>
+                  <ul class="text-sm text-gray-300 space-y-2">
+                    <li>
+                      <strong>Firmware Version:</strong>
+                      <span id="detail-firmware"></span>
+                    </li>
+                    <li>
+                      <strong>Configuration Name:</strong>
+                      <span id="detail-config"></span>
+                    </li>
+                    <li>
+                      <strong>Max Space (GB):</strong>
+                      <span id="detail-max-space"></span>
+                    </li>
+                    <li>
+                      <strong>Free Space (GB):</strong>
+                      <span id="detail-free-space"></span>
+                    </li>
+                    <li>
+                      <strong>Last Sync:</strong>
+                      <span id="detail-last-sync"></span>
+                    </li>
+                    <li>
+                      <strong>Last Known Location:</strong>
+                      <span id="detail-last-location"></span>       
+                    </li>
+                    <li>
+                      <strong>Machine Type:</strong>
+                      <span id="machine-type-display"></span>       
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div class="bg-gray-800 p-4 rounded-lg flex-grow flex flex-col">
+                <div id="detail-map" class="flex-grow rounded-lg"></div>
+              </div>
+            </div>
+            <div
+              id="logged-data-panel"
+              class="bg-gray-800 p-4 rounded-lg flex flex-col"
+            >
+              <div id="folder-view">
+                <div class="flex justify-between items-center mb-4">
+                  <h4 class="font-semibold text-white">Logged Data</h4>
+                  <input
+                    id="folder-search-input"
+                    type="text"
+                    placeholder="Search..."
+                    class="bg-gray-700 border border-gray-600 rounded-lg text-sm px-3 py-1.5 focus:ring-indigo-500"
+                  />
+                </div>
+                <div class="overflow-auto flex-grow">
+                  <table class="w-full text-sm text-left">
+                    <thead
+                      class="text-xs text-gray-400 uppercase bg-gray-900 sticky top-0"
+                    >
+                      <tr>
+                        <th class="px-4 py-2">Folder (Date)</th>
+                        <th class="px-4 py-2">Files</th>
+                        <th class="px-4 py-2">Size</th>
+                      </tr>
+                    </thead>
+                    <tbody id="folder-list-body"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div id="file-view" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                  <div class="flex items-center gap-4">
+                    <button
+                      id="back-to-folders-btn"
+                      class="bg-green-500 bg-opacity-20 text-green-300 rounded-full p-2 hover:bg-opacity-30"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-5 w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                    <h4
+                      id="file-view-title"
+                      class="font-semibold text-white text-lg"
+                    ></h4>
+                  </div>
+                  <div class="relative">
+                    <button
+                      id="download-btn"
+                      class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"
+                    >
+                      Download As
+                      <svg
+                        class="w-4 h-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                    <div
+                      id="download-dropdown"
+                      class="hidden absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg z-20"
+                    >
+                      <div class="py-1">
+                        <a
+                          href="#"
+                          data-format="CSV"
+                          class="download-format-btn block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                          >CSV</a
+                        ><a
+                          href="#"
+                          data-format="Excel"
+                          class="download-format-btn block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                          >Excel</a
+                        ><a
+                          href="#"
+                          data-format="Trace"
+                          class="download-format-btn block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                          >Trace</a
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="overflow-auto flex-grow">
+                  <table class="w-full text-sm text-left">
+                    <thead
+                      class="text-xs text-gray-400 uppercase bg-gray-900 sticky top-0"
+                    >
+                      <tr>
+                        <th class="p-2">
+                          <input
+                            id="select-all-files"
+                            type="checkbox"
+                            class="w-4 h-4 bg-gray-600 border-gray-500 rounded text-indigo-500"
+                          />
+                        </th>
+                        <th class="px-4 py-2">Filename</th>
+                        <th class="px-4 py-2">Size</th>
+                        <th class="px-4 py-2">Last Modified</th>
+                      </tr>
+                    </thead>
+                    <tbody id="file-list-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div
+      id="params-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
+    >
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg relative">
+        <div class="p-6 border-b border-gray-700">
+          <h2 class="text-xl font-semibold text-white">
+            Monitor Live Vehicle Parameters
+          </h2>
+          <p class="text-sm text-gray-400 mt-1">
+            Select the parameters you wish to display on the dashboard.
+          </p>
+          <button
+            id="modal-close-btn"
+            class="absolute top-4 right-4 text-gray-500 hover:text-white"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <div class="relative mb-4">
+            <input
+              type="text"
+              placeholder="Search Parameters"
+              class="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2"
+            />
+            <div
+              class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5 text-gray-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+          </div>
+          <ul
+            id="modal-param-list"
+            class="space-y-3 max-h-48 overflow-y-auto pr-2"
+          ></ul>
+        </div>
+        <div class="p-4 bg-gray-900 rounded-b-lg flex justify-end">
+          <button
+            id="modal-next-btn"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "login.html";
+          return;
+        }
+
+        const logoutBtn = document.getElementById("logout-btn");
+        if (logoutBtn) {
+          logoutBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            localStorage.removeItem("token");
+            window.location.href = "login.html";
+          });
+        }
+
+        function parseJwt(token) {
+          try {
+            return JSON.parse(atob(token.split(".")[1]));
+          } catch (e) {
+            return null;
+          }
+        }
+        const decodedToken = parseJwt(token);
+
+        const profileDropdownMenu = document.querySelector(
+          "#profile-dropdown .py-1"
+        );
+        if (decodedToken && decodedToken.role === "admin") {
+          const adminLink = document.createElement("a");
+          adminLink.href = "admin.html";
+          adminLink.className =
+            "block px-4 py-2 text-sm text-yellow-400 hover:bg-gray-600";
+          adminLink.textContent = "Admin Panel";
+          profileDropdownMenu.prepend(adminLink);
+        }
+
+        const socket = io("http://127.0.0.1:5000");
+        socket.on("connect", () => {
+          console.log("Connected to WebSocket server!");
+        });
+
+        const greetingSpan = document.getElementById("greeting-span");
+        const mainTitle = document.getElementById("main-title"),
+          mainSubtitle = document.getElementById("main-subtitle");
+        const profileBtn = document.getElementById("profile-btn"),
+          profileDropdown = document.getElementById("profile-dropdown");
+        const globalView = document.getElementById("global-overview"),
+          detailView = document.getElementById("device-detail-view");
+        const deviceListBody = document.getElementById("device-list-body"),
+          backBtn = document.getElementById("back-to-overview-btn");
+        const editParamsBtn = document.getElementById("edit-params-btn");
+        const paramsModal = document.getElementById("params-modal"),
+          modalCloseBtn = document.getElementById("modal-close-btn");
+        const modalNextBtn = document.getElementById("modal-next-btn"),
+          modalParamList = document.getElementById("modal-param-list");
+        const vehicleParamsGrid = document.getElementById(
+          "vehicle-params-grid"
+        );
+        const folderView = document.getElementById("folder-view"),
+          fileView = document.getElementById("file-view");
+        const folderListBody = document.getElementById("folder-list-body"),
+          fileListBody = document.getElementById("file-list-body");
+        const folderSearchInput = document.getElementById(
+          "folder-search-input"
+        );
+        const backToFoldersBtn = document.getElementById("back-to-folders-btn"),
+          fileViewTitle = document.getElementById("file-view-title");
+        const downloadBtn = document.getElementById("download-btn"),
+          downloadDropdown = document.getElementById("download-dropdown");
+        const selectAllFiles = document.getElementById("select-all-files");
+
+        let currentDevice = null,
+          overviewMap = null,
+          detailMap = null;
+        let devicesData = [];
+
+        const currentHour = new Date().getHours();
+        greetingSpan.textContent = `${
+          currentHour < 12
+            ? "Good morning"
+            : currentHour < 17
+            ? "Good afternoon"
+            : "Good evening"
+        }, Hardik`;
+
+        fetch("http://127.0.0.1:5000/api/devices", {
+          headers: { "x-access-token": token },
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.message) {
+              alert(data.message);
+              localStorage.removeItem("token");
+              window.location.href = "login.html";
+            } else {
+              devicesData = data;
+              initializeApp(devicesData);
+              setupWebSocketListeners(devicesData);
+            }
+          })
+          .catch((error) => console.error("Error fetching devices:", error));
+
+        function setupWebSocketListeners(devices) {
+          devices.forEach((device) => {
+            socket.on(`device_update_${device.id}`, function (data) {
+              const deviceToUpdate = devicesData.find(
+                (d) => d.id === data.device_id
+              );
+              if (deviceToUpdate) {
+                Object.assign(deviceToUpdate.parameters, data);
+              }
+              if (currentDevice && currentDevice.id === data.device_id) {
+                updateVehicleParametersDisplay();
+              }
+            });
+          });
+        }
+
+        function initializeApp(devices) {
+          if (!devices || devices.length === 0) {
+            deviceListBody.innerHTML =
+              '<tr><td colspan="4" class="text-center py-4 text-gray-400">No devices found.</td></tr>';
+            initOverviewMap([]);
+            return;
+          }
+          deviceListBody.innerHTML = "";
+          devices.forEach((device) => {
+            const row = document.createElement("tr");
+            row.className =
+              "bg-gray-800 border-b border-gray-700 hover:bg-gray-600";
+            row.innerHTML = `<td class="px-4 py-3 font-medium text-white">${
+              device.machine_model || device.name    
+            }</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${
+              device.status === "Online"
+                ? "bg-green-900 text-green-300"
+                : "bg-red-900 text-red-300"
+            }">${
+              device.status
+            }</span></td><td class="px-4 py-3">${device.parameters[
+              "Engine Hours"
+            ].toFixed(2)}</td><td class="px-4 py-3"><button data-device-id="${
+              device.id
+            }" class="more-info-btn font-medium text-indigo-400 hover:underline">More Info</button></td>`;
+            deviceListBody.appendChild(row);
+          });
+          initOverviewMap(devices);
+        }
+
+        function initOverviewMap(devices) {
+          if (overviewMap) overviewMap.remove();
+          overviewMap = L.map("map").setView([22.2587, 71.1924], 6);
+          L.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+            { attribution: "&copy; OpenStreetMap &copy; CARTO" }
+          ).addTo(overviewMap);
+          if (devices) {
+            devices.forEach((d) =>
+              L.marker([d.lat, d.lon])
+                .addTo(overviewMap)
+                .bindPopup(`<b>${d.name}</b><br>${d.serial}`)
+            );
+          }
+        }
+        function initDetailMap(lat, lon) {
+          if (detailMap) detailMap.remove();
+          detailMap = L.map("detail-map").setView([lat, lon], 13);
+          L.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          ).addTo(detailMap);
+          L.marker([lat, lon]).addTo(detailMap);
+          setTimeout(() => detailMap.invalidateSize(), 100);
+        }
+
+        deviceListBody.addEventListener("click", (e) => {
+          if (e.target.classList.contains("more-info-btn")) {
+            currentDevice = devicesData.find(
+              (d) => d.id === parseInt(e.target.dataset.deviceId)
+            );
+            if (currentDevice) showDeviceDetail();
+          }
+        });
+        profileBtn.addEventListener("click", () =>
+          profileDropdown.classList.toggle("hidden")
+        );
+        window.addEventListener("click", (e) => {
+          if (
+            !profileBtn.contains(e.target) &&
+            !downloadBtn.contains(e.target)
+          ) {
+            profileDropdown.classList.add("hidden");
+            downloadDropdown.classList.add("hidden");
+          }
+        });
+        backBtn.addEventListener("click", showGlobalOverview);
+        editParamsBtn.addEventListener("click", () => {
+          modalParamList.innerHTML = "";
+          Object.keys(currentDevice.parameters).forEach((paramName) => {
+            const isChecked =
+              currentDevice.displayParameters.includes(paramName);
+            const listItem = document.createElement("li");
+            listItem.className = "flex items-center justify-between";
+            listItem.innerHTML = `<label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" data-param-name="${paramName}" class="w-4 h-4 bg-gray-600 border-gray-500 rounded text-indigo-500" ${
+              isChecked ? "checked" : ""
+            }> ${paramName.replace(
+              /_/g,
+              " "
+            )}</label><span class="text-xs text-gray-500">${
+              isChecked ? "shown" : "not added"
+            }</span>`;
+            modalParamList.appendChild(listItem);
+          });
+          paramsModal.classList.remove("hidden");
+        });
+        modalCloseBtn.addEventListener("click", () =>
+          paramsModal.classList.add("hidden")
+        );
+        modalNextBtn.addEventListener("click", () => {
+          const selectedParams = [];
+          modalParamList
+            .querySelectorAll('input[type="checkbox"]:checked')
+            .forEach((checkbox) => {
+              selectedParams.push(checkbox.dataset.paramName);
+            });
+          currentDevice.displayParameters = selectedParams;
+          updateVehicleParametersDisplay();
+          paramsModal.classList.add("hidden");
+        });
+        folderSearchInput.addEventListener("keyup", () => {
+          const searchTerm = folderSearchInput.value.toLowerCase();
+          folderListBody.querySelectorAll("tr").forEach((row) => {
+            const folderName = row
+              .querySelector("td")
+              .textContent.toLowerCase();
+            if (folderName.includes(searchTerm)) {
+              row.style.display = "";
+            } else {
+              row.style.display = "none";
+            }
+          });
+        });
+        folderListBody.addEventListener("click", (e) => {
+          const folderRow = e.target.closest("tr");
+          if (folderRow) {
+            showFileView(
+              folderRow.dataset.folderId,
+              folderRow.dataset.folderName
+            );
+          }
+        });
+        backToFoldersBtn.addEventListener("click", () => {
+          fileView.classList.add("hidden");
+          folderView.classList.remove("hidden");
+        });
+        downloadBtn.addEventListener("click", () =>
+          downloadDropdown.classList.toggle("hidden")
+        );
+        downloadDropdown.addEventListener("click", (e) => {
+          if (e.target.classList.contains("download-format-btn")) {
+            const format = e.target.dataset.format;
+            const selectedFiles = fileListBody.querySelectorAll(
+              'input[type="checkbox"]:checked'
+            );
+            if (selectedFiles.length === 0) {
+              alert("Please select one or more files to download.");
+            } else {
+              alert(
+                `Downloading ${selectedFiles.length} file(s) as ${format}...`
+              );
+            }
+            downloadDropdown.classList.add("hidden");
+          }
+        });
+        selectAllFiles.addEventListener("change", (e) =>
+          fileListBody
+            .querySelectorAll('input[type="checkbox"]')
+            .forEach((cb) => (cb.checked = e.target.checked))
+        );
+
+        function updateVehicleParametersDisplay() {
+          vehicleParamsGrid.innerHTML = "";
+          currentDevice.displayParameters.forEach((paramName) => {
+            const value = currentDevice.parameters[paramName];
+            const formattedValue =
+              typeof value === "number" &&
+              paramName.toLowerCase().includes("hours")
+                ? value.toFixed(2)
+                : typeof value === "number"
+                ? value
+                : value;
+            const paramCard = document.createElement("div");
+            paramCard.innerHTML = `<p class="text-xs text-gray-400 uppercase">${paramName.replace(
+              /_/g,
+              " "
+            )}</p><p class="text-2xl font-bold text-white">${formattedValue}</p>`;
+            vehicleParamsGrid.appendChild(paramCard);
+          });
+        }
+
+        function showFileView(folderId, folderName) {
+          folderView.classList.add("hidden");
+          fileView.classList.remove("hidden");
+          fileViewTitle.textContent = `Folder ${folderName}`;
+          fileListBody.innerHTML =
+            '<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading files...</td></tr>';
+          fetch(`http://127.0.0.1:5000/api/logs/${folderId}/files`, {
+            headers: { "x-access-token": token },
+          })
+            .then((response) => response.json())
+            .then((files) => {
+              fileListBody.innerHTML = "";
+              if (files.length === 0) {
+                fileListBody.innerHTML =
+                  '<tr><td colspan="4" class="text-center py-4 text-gray-500">No files found.</td></tr>';
+                return;
+              }
+              files.forEach((file) => {
+                const row = document.createElement("tr");
+                row.className =
+                  "bg-gray-800 border-b border-gray-700 hover:bg-gray-600";
+                row.innerHTML = `<td class="p-2"><input type="checkbox" class="w-4 h-4 bg-gray-600 border-gray-500 rounded text-indigo-500"></td><td class="px-4 py-2 font-mono">${file.name}</td><td class="px-4 py-2">${file.size}</td><td class="px-4 py-2">${file.modified}</td>`;
+                fileListBody.appendChild(row);
+              });
+            })
+            .catch((error) => {
+              console.error("Error fetching files:", error);
+              fileListBody.innerHTML =
+                '<tr><td colspan="4" class="text-center py-4 text-red-400">Error loading files.</td></tr>';
+            });
+        }
+
+        function showDeviceDetail() {
+          mainTitle.textContent = `Live Data for ${currentDevice.machine_model}`;
+          mainSubtitle.textContent = `Displaying real-time telemetry for ${currentDevice.serial}`;
+
+          console.log("Current device data:", currentDevice); // <-- NEW DEBUG LINE
+          const machineType = currentDevice.machine_model;
+          console.log("Machine Type from data:", machineType); // <-- NEW DEBUG LINE
+
+          const vehicleImage = document.getElementById("vehicle-image");
+          const imageMap = {
+            AP550: "/static/images/ap550.png",
+            ARX90_2: "/static/images/arx90_2.png",
+            AP600: "/static/images/ap600.png",
+            ARS110_2: "/static/images/ars110_2.png",
+            WM6: "/static/images/wm6.png",
+            AP1000: "/static/images/ap1000.png",
+            ARX32_2: "/static/images/arx32.2.png",
+          };
+          vehicleImage.src =
+            imageMap[currentDevice.machine_model] || "/static/images/ap1000.png";
+
+          document.getElementById("detail-space").textContent = `${(
+            ((currentDevice.maxSpace - currentDevice.freeSpace) /
+              currentDevice.maxSpace) *
+            100
+          ).toFixed(0)}% used`;
+          const statusEl = document.getElementById("detail-status");
+          statusEl.textContent = currentDevice.status;
+          statusEl.className =
+            currentDevice.status === "Online"
+              ? "text-green-400"
+              : "text-red-400";
+          document.getElementById("machine-type-display").textContent =
+            currentDevice.machine_type; // This will show the machine type
+          document.getElementById(
+            "detail-logger-title"
+          ).textContent = `${currentDevice.serial} Status`;
+          document.getElementById("detail-firmware").textContent =
+            currentDevice.firmware;
+          document.getElementById("detail-config").textContent =
+            currentDevice.config;
+          document.getElementById("detail-max-space").textContent =
+            currentDevice.maxSpace.toFixed(2);
+          document.getElementById("detail-free-space").textContent =
+            currentDevice.freeSpace.toFixed(2);
+          document.getElementById("detail-last-sync").textContent =
+            currentDevice.lastSync
+              ? new Date(currentDevice.lastSync).toLocaleString()
+              : "No sync data";
+          document.getElementById("detail-last-location").textContent = `Lat: ${
+            currentDevice.lat
+          }, Lon: ${currentDevice.lon}`; // Display lat/lon as last known location
+
+          updateVehicleParametersDisplay();
+
+          folderListBody.innerHTML =
+            '<tr><td colspan="3" class="text-center py-4">Loading folders...</td></tr>';
+          fetch(`http://127.0.0.1:5000/api/devices/${currentDevice.id}/logs`, {
+            headers: { "x-access-token": token },
+          })
+            .then((response) => response.json())
+            .then((folders) => {
+              folderListBody.innerHTML = "";
+              if (folders && folders.length > 0) {
+                folders.forEach((folder) => {
+                  const row = document.createElement("tr");
+                  row.className =
+                    "bg-gray-800 border-b border-gray-700 hover:bg-gray-600 cursor-pointer";
+                  row.dataset.folderId = folder.id;
+                  row.dataset.folderName = folder.name;
+                  row.innerHTML = `<td class="px-4 py-2 font-mono">${folder.name}</td><td class="px-4 py-2 text-gray-400">${folder.file_count}</td><td class="px-4 py-2 text-gray-400">...</td>`;
+                  folderListBody.appendChild(row);
+                });
+              } else {
+                folderListBody.innerHTML =
+                  '<tr><td colspan="3" class="text-center py-4 text-gray-400">No log folders found.</td></tr>';
+              }
+            })
+            .catch((error) => console.error("Error fetching folders:", error));
+
+          fileView.classList.add("hidden");
+          folderView.classList.remove("hidden");
+          globalView.classList.add("hidden");
+          detailView.classList.remove("hidden");
+          initDetailMap(currentDevice.lat, currentDevice.lon);
+        }
+
+        function showGlobalOverview() {
+          mainTitle.textContent = "Global Overview";
+          mainSubtitle.textContent = "Welcome to your global overview";
+          detailView.classList.add("hidden");
+          globalView.classList.remove("hidden");
+          setTimeout(() => {
+            if (overviewMap) overviewMap.invalidateSize();
+          }, 100);
+        }
+      });
+    </script>
+  </body>
+</html>
