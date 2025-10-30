@@ -1,0 +1,61 @@
+ChatGPT said:
+
+Good question — the error in your terminal:
+
+ModuleNotFoundError: No module named 'flask'
+
+
+means Python can’t find the Flask library in your current environment.
+
+Let’s fix it step-by-step 👇
+
+🧩 Why This Happens
+
+You’re running:
+
+py .\app.py
+
+
+but your virtual environment (venv) isn’t activated, so Python is using the system interpreter, not the one where Flask should be installed.
+
+✅ Solution Steps
+1. Activate your virtual environment
+
+In your terminal, run:
+
+On Windows (PowerShell):
+
+.\venv\Scripts\activate
+
+
+You should see (venv) appear at the beginning of your terminal prompt.
+
+2. Verify Flask is installed
+
+Once activated, run:
+
+pip show flask
+
+
+If you see details like Name: Flask, it’s installed.
+
+If not, install it:
+
+pip install flask flask-cors flask-socketio flask-sqlalchemy flask-migrate
+
+
+(These are all the libraries used in your app.py.)
+
+3. Run your app again
+
+Now execute:
+
+python app.py
+
+
+or
+
+py app.py
+
+
+If Flask is installed in your venv, this time it should start without the ModuleNotFoundError.

@@ -170,6 +170,7 @@
                     alt="Vehicle Image"
                     class="rounded-lg object-contain w-4/5 h-auto"
                   />
+                  <h4 id="machine-name-display" class="font-semibold text-white text-lg mt-2"></h4>
                 </div>
                 <div>
                   <h4
@@ -764,6 +765,8 @@
           };
           vehicleImage.src =
             imageMap[currentDevice.machine_model] || "/static/images/ap1000.png";
+
+          document.getElementById("machine-name-display").textContent = currentDevice.machine_model || 'Unknown Machine';
 
           document.getElementById("detail-space").textContent = `${(
             ((currentDevice.maxSpace - currentDevice.freeSpace) /
