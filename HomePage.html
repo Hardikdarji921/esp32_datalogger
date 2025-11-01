@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Global Telematics Dashboard</title>
+	  <link rel="icon" href="/static/images/AMMANNLogo.svg" type="image/svg+xml" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link
       rel="stylesheet"
@@ -40,6 +41,7 @@
       <div class="p-4 sm:p-6 flex-grow flex flex-col">
         <header class="mb-6 flex justify-between items-center">
           <div>
+		    <img src="https://www.ammann.com/assets/AmmannLogo.svg" alt="Ammann Logo" class="h-10" />
             <h1 id="main-title" class="text-3xl font-bold text-white">
               Global Overview
             </h1>
@@ -766,7 +768,21 @@
           vehicleImage.src =
             imageMap[currentDevice.machine_model] || "/static/images/ap1000.png";
 
-          document.getElementById("machine-name-display").textContent = currentDevice.machine_model || 'Unknown Machine';
+          // Make the detail view visible before updating content
+          globalView.classList.add("hidden");
+          detailView.classList.remove("hidden");
+
+          // Now update content safely
+          const machineNameEl = document.getElementById("machine-name-display");
+          if (machineNameEl) {
+            machineNameEl.textContent = currentDevice.machine_model || 'Unknown Machine';
+          }
+
+          // Repeat for other elements:
+          const machineTypeEl = document.getElementById("machine-type-display");
+          if (machineTypeEl) {
+            machineTypeEl.textContent = currentDevice.machine_type || 'Unknown Type';
+          }
 
           document.getElementById("detail-space").textContent = `${(
             ((currentDevice.maxSpace - currentDevice.freeSpace) /
