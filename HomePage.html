@@ -165,13 +165,15 @@
               <div
                 class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-800 p-4 rounded-lg"
               >
-                <div class="flex flex-col items-center justify-center p-2">
-                  <img
-                    id="vehicle-image"
-                    src="https://via.placeholder.com/400x300.png/1F2937/FFFFFF?text=Vehicle+Image"
-                    alt="Vehicle Image"
-                    class="rounded-lg object-contain w-4/5 h-auto"
-                  />
+				<div class="flex flex-col items-center justify-center p-2">
+                  <div class="w-full h-64 rounded-lg overflow-hidden">
+                    <img
+                      id="vehicle-image"
+                      src="https://via.placeholder.com/400x300.png/1F2937/FFFFFF?text=Vehicle+Image"
+                      alt="Vehicle Image"
+                      class="w-full h-full object-contain"
+                    />
+                  </div>
                   <h4 id="machine-name-display" class="font-semibold text-white text-lg mt-2"></h4>
                 </div>
                 <div>
@@ -453,8 +455,7 @@
           profileDropdownMenu.prepend(adminLink);
         }
 
-        //const socket = io("http://127.0.0.1:5000");			//used for run in local
-		const socket = io("https://esp32-datalogger.onrender.com");	//used for run in local
+        const socket = io("http://127.0.0.1:5000");			//used for run in local
         socket.on("connect", () => {
           console.log("Connected to WebSocket server!");
         });
@@ -503,9 +504,7 @@
             : "Good evening"
         }, Hardik`;
 
-       // fetch("http://127.0.0.1:5000/api/devices", {		//used for run in local system
-        fetch('https://esp32-datalogger.onrender.com/api/devices", {		//used for run on render
-		
+        fetch("http://127.0.0.1:5000/api/devices", {		//used for run in local system
           headers: { "x-access-token": token },
         })
           .then((response) => response.json())
@@ -550,19 +549,23 @@
             const row = document.createElement("tr");
             row.className =
               "bg-gray-800 border-b border-gray-700 hover:bg-gray-600";
-            row.innerHTML = `<td class="px-4 py-3 font-medium text-white">${
-              device.machine_model || device.name    
-            }</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${
-              device.status === "Online"
-                ? "bg-green-900 text-green-300"
-                : "bg-red-900 text-red-300"
-            }">${
-              device.status
-            }</span></td><td class="px-4 py-3">${device.parameters[
-              "Engine Hours"
-            ].toFixed(2)}</td><td class="px-4 py-3"><button data-device-id="${
-              device.id
-            }" class="more-info-btn font-medium text-indigo-400 hover:underline">More Info</button></td>`;
+            // This helper logic finds the correct engine hours key
+				const engineHours = device.parameters["total_engine_hours_h"] !== undefined
+					? device.parameters["total_engine_hours_h"]
+					: device.parameters["Engine Hours"];
+				const formattedHours = (typeof engineHours === 'number') ? engineHours.toFixed(2) : 'N/A';
+
+				row.innerHTML = `<td class="px-4 py-3 font-medium text-white">${
+				  device.machine_model || device.name
+				}</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${
+				  device.status === "Online"
+					? "bg-green-900 text-green-300"
+					: "bg-red-900 text-red-300"
+				}">${
+				  device.status
+				}</span></td><td class="px-4 py-3">${formattedHours}</td><td class="px-4 py-3"><button data-device-id="${
+				  device.id
+				}" class="more-info-btn font-medium text-indigo-400 hover:underline">More Info</button></td>`;
             deviceListBody.appendChild(row);
           });
           initOverviewMap(devices);
@@ -724,8 +727,7 @@
           fileViewTitle.textContent = `Folder ${folderName}`;
           fileListBody.innerHTML =
             '<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading files...</td></tr>';
-          //fetch(`http://127.0.0.1:5000/api/logs/${folderId}/files`, {		//used for run in local system
-          fetch('https://esp32-datalogger.onrender.com/api/logs/${folderId}/files`, {		//used for run on render
+          fetch(`http://127.0.0.1:5000/api/logs/${folderId}/files`, {		//used for run in local system
             headers: { "x-access-token": token },
           })
             .then((response) => response.json())
@@ -824,9 +826,7 @@
 
           folderListBody.innerHTML =
             '<tr><td colspan="3" class="text-center py-4">Loading folders...</td></tr>';
-         // fetch(`http://127.0.0.1:5000/api/devices/${currentDevice.id}/logs`, {		//used for run in local system
-          fetch('https://esp32-datalogger.onrender.com/api/devices/${currentDevice.id}/logs`, {		// used for run on render
-		  
+          fetch(`http://127.0.0.1:5000/api/devices/${currentDevice.id}/logs`, {		//used for run in local system		  
             headers: { "x-access-token": token },
           })
             .then((response) => response.json())

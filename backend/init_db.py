@@ -2,58 +2,63 @@ from app import app, db, Device, User, LogFolder, LogFile
 from werkzeug.security import generate_password_hash
 import json
 
+# This is the new, detailed data payload from your ESP32
+device_1_params = {
+    "timestamp": 1730707200,
+    "last_sync_utc": "2025-11-04T12:00:00Z",
+    "uptime_sec": 45600,
+    "gps_fix": True,
+    "lat": 40.712800,
+    "lon": -74.006000,
+    "machine_name": "Field Harvester Alpha",
+    "vin_number": "J1939-XYZ-12345",
+    "sd_free_mb": 18500,
+    "last_sync_duration_ms": 1250,
+    "engine_rpm_spn": 1850,
+    "accel_pos_pc": 25.5,
+    "fuel_rate_lh": 50.0,
+    "coolant_temp_c": 90.5,
+    "oil_pressure_kpa": 400,
+    "total_engine_hours_h": 1000.50,
+    "daily_engine_hours_h": 3.75,
+    "fuel_level_pc": 75.2,
+    "def_level_pc": 55.0,
+    "sw_major_version": 4,
+    "sw_minor_version": 2,
+    "sw_service_pack": 1,
+    "sw_hot_fix": 5,
+    "dtcs": "Engine, DTCs: None | TTC_MCU, DTCs: 8212-3 (OC:1)",
+    "bus": "engine"
+}
+
+# This is the old data for the other devices, for variety
+device_2_params = { "Engine Hours": 756.80, "Altitude": 45.5, "Speed Over Ground": 0.00, "Tire Pressure": 32, "Oil Temp": 95 }
+device_3_params = { "Engine Hours": 510.00, "Altitude": 15.0, "Speed Over Ground": 0.00 }
+
 mock_devices_data = [
     { 
-        "id": 1,
-        "name": "V-2207",
-        "serial": "JMR01-CSV-V2",
-        "status": "Online",
-        "lat": 23.0225,
-        "lon": 72.5714,
-        "firmware": "3.04.1-RC",
-        "config": "UNITSCANNER_2",
-        "maxSpace": 29.82,
-        "freeSpace": 1.5,
-        "parameters": { "Engine Hours": 864.80, "Altitude": 76.2, "Speed Over Ground": 55.00, "Latitude": 23.0225, "Longitude": 72.5714, "Quality": "Good" },
-        "displayParameters": ["Engine Hours", "Altitude", "Speed Over Ground"],
-        "machine_model": "AP550",
-        "machine_type": "CEV_V"  # <-- Add this line
+        "id": 1, "name": "V-2207", "serial": "JMR01-CSV-V2", "status": "Online", "lat": 23.0225, "lon": 72.5714,
+        "firmware": "3.04.1-RC", "config": "UNITSCANNER_2", "maxSpace": 29.82, "freeSpace": 1.5,
+        "parameters": device_1_params, # <-- Use the new detailed parameters
+        "displayParameters": ["engine_rpm_spn", "accel_pos_pc", "fuel_rate_lh"], # Default parameters to show
+        "machine_model": "AP550", "machine_type": "CEV_V"
     },
     { 
-        "id": 2,
-        "name": "V-2336",
-        "serial": "JPR08-CSV-V",
-        "status": "Online",
-        "lat": 22.3072,
-        "lon": 73.1812,
-        "firmware": "3.03.0-RC",
-        "config": "DEFAULT_CFG",
-        "maxSpace": 29.82,
-        "freeSpace": 10.2,
-        "parameters": { "Engine Hours": 756.80, "Altitude": 45.5, "Speed Over Ground": 0.00, "Tire Pressure": 32, "Oil Temp": 95 },
+        "id": 2, "name": "V-2336", "serial": "JPR08-CSV-V", "status": "Online", "lat": 22.3072, "lon": 73.1812,
+        "firmware": "3.03.0-RC", "config": "DEFAULT_CFG", "maxSpace": 29.82, "freeSpace": 10.2,
+        "parameters": device_2_params,
         "displayParameters": ["Engine Hours", "Altitude", "Speed Over Ground"],
-        "machine_model": "ARS110_2",
-        "machine_type": "CEV_V"
+        "machine_model": "ARS110_2", "machine_type": "CEV_V"
     },
     { 
-        "id": 3,
-        "name": "V-2209",
-        "serial": "JMR02-CSV-V1",
-        "status": "Offline",
-        "lat": 22.5726,
-        "lon": 88.3639,
-        "firmware": "2.95.5-STABLE",
-        "config": "LEGACY_MODE",
-        "maxSpace": 14.9,
-        "freeSpace": 0.8,
-        "parameters": { "Engine Hours": 510.00, "Altitude": 15.0, "Speed Over Ground": 0.00 },
+        "id": 3, "name": "V-2209", "serial": "JMR02-CSV-V1", "status": "Offline", "lat": 22.5726, "lon": 88.3639,
+        "firmware": "2.95.5-STABLE", "config": "LEGACY_MODE", "maxSpace": 14.9, "freeSpace": 0.8,
+        "parameters": device_3_params,
         "displayParameters": ["Engine Hours", "Altitude", "Speed Over Ground"],
-        "machine_model": "AP600",
-        "machine_type": "CEV_IV"
+        "machine_model": "AP600", "machine_type": "CEV_IV"
     }
 ]
 
-# Use the app context to work with the database
 with app.app_context():
     print("Dropping all tables...")
     db.drop_all()
@@ -65,20 +70,12 @@ with app.app_context():
     devices = []
     for device_data in mock_devices_data:
         new_device = Device(
-            id=device_data["id"],
-            name=device_data["name"],
-            serial=device_data["serial"],
-            status=device_data["status"],
-            lat=device_data["lat"],
-            lon=device_data["lon"],
-            firmware=device_data["firmware"],
-            config=device_data["config"],
-            maxSpace=device_data["maxSpace"],
-            freeSpace=device_data["freeSpace"],
-            parameters=json.dumps(device_data["parameters"]),
+            id=device_data["id"], name=device_data["name"], serial=device_data["serial"],
+            status=device_data["status"], lat=device_data["lat"], lon=device_data["lon"],
+            firmware=device_data["firmware"], config=device_data["config"], maxSpace=device_data["maxSpace"],
+            freeSpace=device_data["freeSpace"], parameters=json.dumps(device_data["parameters"]),
             displayParameters=json.dumps(device_data["displayParameters"]),
-            machine_model=device_data["machine_model"],
-            machine_type=device_data["machine_type"]  
+            machine_model=device_data["machine_model"], machine_type=device_data["machine_type"]  
         )
         db.session.add(new_device)
         devices.append(new_device)

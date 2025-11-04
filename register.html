@@ -62,9 +62,7 @@
                 password: document.getElementById('password').value,
             };
 
-            //fetch('http://127.0.0.1:5000/api/register', {		//used for run in Local system
-            fetch('https://esp32-datalogger.onrender.com/api/register', {		//used for run in render
-			
+            fetch('http://127.0.0.1:5000/api/register', {		//used for run in Local system
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

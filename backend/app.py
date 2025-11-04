@@ -57,8 +57,8 @@ def handle_exception(e):
 
 # --- CONFIGURATION ---
 app.config['SECRET_KEY'] = 'your-super-secret-key-that-no-one-should-know'
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'    # uncomment when you want tot use this internal
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://telematics_db_user:g5hivFFZWhCxkbAmOum07GoL2BMm1qPf@dpg-d44o0tkhg0os73fitedg-a/telematics_db'        # this used for render make it run on live
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'    # uncomment when you want tot use this internal
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://telematics_db_user:g5hivFFZWhCxkbAmOum07GoL2BMm1qPf@dpg-d44o0tkhg0os73fitedg-a/telematics_db'        # this used for render make it run on live
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
