@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Telematics Dashboard</title>
+    <script src="config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -66,7 +67,7 @@
                 const password = passwordInput.value;
 
                 // Send the data to the backend API
-                fetch('http://127.0.0.1:5000/api/login', {		//used for run in local system
+                fetch(`${APP_CONFIG.API_BASE_URL}/api/login`, {		//used for run in local system
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

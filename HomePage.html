@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Global Telematics Dashboard</title>
-	<link rel="icon" href="/static/images/AMMANNLogo.svg" type="image/svg+xml" />
-	<script src="config.js">
+	<script src="config.js"></script>
+	  <link rel="icon" href="/static/images/AMMANNLogo.svg" type="image/svg+xml" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link
       rel="stylesheet"
@@ -505,7 +505,7 @@
             : "Good evening"
         }, Hardik`;
 
-        fetch(APP_CONFIG.API_BASE_URL + "/api/devices", {		//used for run in local system
+        fetch(`${APP_CONFIG.API_BASE_URL}/api/devices`, {		//used for run in local system
           headers: { "x-access-token": token },
         })
           .then((response) => response.json())
@@ -728,7 +728,7 @@
           fileViewTitle.textContent = `Folder ${folderName}`;
           fileListBody.innerHTML =
             '<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading files...</td></tr>';
-          fetch(APP_CONFIG.API_BASE_URL + `/api/logs/${folderId}/files`, {		//used for run in local system
+          fetch(`${APP_CONFIG.API_BASE_URL}/api/logs/${folderId}/files`, {		//used for run in local system
             headers: { "x-access-token": token },
           })
             .then((response) => response.json())
@@ -827,7 +827,7 @@
 
           folderListBody.innerHTML =
             '<tr><td colspan="3" class="text-center py-4">Loading folders...</td></tr>';
-          fetch(APP_CONFIG.API_BASE_URL + `/api/devices/${currentDevice.id}/logs`, {		//used for run in local system		  
+          fetch(`${APP_CONFIG.API_BASE_URL}/api/devices/${currentDevice.id}/logs`, {		//used for run in local system		  
             headers: { "x-access-token": token },
           })
             .then((response) => response.json())
