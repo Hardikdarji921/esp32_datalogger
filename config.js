@@ -6,7 +6,7 @@
 // To run locally: set environment = 'local'
 // To run on Render: set environment = 'production'
 //
-const environment = 'local'; // <-- EDIT THIS LINE
+const environment = 'production'; // <-- EDIT THIS LINE
 // -----------------------------------------------------------------
 
 const configs = {
