@@ -1,4 +1,4 @@
-cd  alembic==1.16.5
+alembic==1.16.5
 anyio==4.9.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==21.2.0
