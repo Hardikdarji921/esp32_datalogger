@@ -1,4 +1,4 @@
-cd  alembic==1.16.5
+alembic==1.16.5
 anyio==4.9.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==21.2.0
@@ -139,7 +139,7 @@ terminado==0.18.1
 textparser==0.24.0
 threadpoolctl==3.6.0
 tinycss2==1.4.0
-torch==2.7.1+cpu
+torch==2.7.1
 tornado==6.5.1
 traitlets==5.14.3
 types-python-dateutil==2.9.0.20250708
