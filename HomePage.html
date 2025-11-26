@@ -419,12 +419,14 @@
     </div>
 
     <script>
+      // Check for token immediately (before DOMContentLoaded) to redirect unauthenticated users
+      // to login before the page renders (avoids JWT token errors on first load)
+      const token = localStorage.getItem("token");
+      if (!token) {
+        window.location.href = "login.html";
+      }
+
       document.addEventListener("DOMContentLoaded", () => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          window.location.href = "login.html";
-          return;
-        }
 
         const logoutBtn = document.getElementById("logout-btn");
         if (logoutBtn) {
