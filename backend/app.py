@@ -201,10 +201,12 @@ def serve_html(filename):
 
 # Or for root: Serve HomePage.html specifically
 @app.route('/')
+def root():
+    return send_from_directory('../', 'login.html')
+
 @app.route('/HomePage.html')
 def home():
-    return send_from_directory('../', 'HomePage.html')  # Adjust path if HTML is elsewhere
-
+    return send_from_directory('../', 'HomePage.html')
 
 # --- AUTHENTICATION & ADMIN API ENDPOINTS ---
 @app.route("/api/live-data", methods=['POST'])
