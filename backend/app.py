@@ -2,40 +2,36 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError
-import werkzeug.exceptions  # <-- ADD THIS IMPORT
+import werkzeug.exceptions
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
-import json  # <-- ADD THIS IMPORT IF IT'S NOT THERE
+import json
 import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 from flask_migrate import Migrate
-import os # <-- ADD THIS IMPORT
-from flask import send_from_directory  # Add this for serving files from a directory
+import os
+from flask import send_from_directory
 import urllib.parse
 
+# ### NEW: Import Supabase Client ###
+from supabase import create_client, Client
+
 # --- ROBUST PATH CONFIGURATION ---
-# Get the absolute path of the directory where this script is located (backend/)
 basedir = os.path.abspath(os.path.dirname(__file__))
-# Construct the absolute path to the static folder (one level up from backend/)
 static_dir = os.path.join(os.path.dirname(basedir), 'static')
 
-# Tell Flask to use this absolute path for the static folder.
 app = Flask(__name__, static_folder=static_dir, static_url_path='/static')
-# app = Flask(__name__)
 
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-
 # --- GLOBAL ERROR HANDLER ---
-# This will catch any unhandled exception in the app and ensure a JSON response is sent.
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Return JSON instead of HTML for any application-level error."""
-    # Pass through HTTP-specific exceptions
     if isinstance(e, (werkzeug.exceptions.HTTPException,)):
         response = e.get_response()
         response.data = json.dumps({
@@ -46,7 +42,6 @@ def handle_exception(e):
         response.content_type = "application/json"
         return response
 
-    # Handle non-HTTP exceptions with a generic 500 server error
     response = {
         "message": f"An internal server error occurred: {str(e)}",
         "code": 500,
@@ -55,23 +50,30 @@ def handle_exception(e):
     return jsonify(response), 500
 
 
-
 # --- CONFIGURATION ---
 app.config['SECRET_KEY'] = 'your-super-secret-key-that-no-one-should-know'
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'    # uncomment when you want tot use this internal
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://telematics_db_user:g5hivFFZWhCxkbAmOum07GoL2BMm1qPf@dpg-d44o0tkhg0os73fitedg-a/telematics_db'        # this used for render make it run on live
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres.qditrhotokqilstiswex:Hardik%40123@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres'
 
+# Database Connection (Your correctly configured Pooler URL)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres.qditrhotokqilstiswex:Hardik%40123@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Mail Config
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'espdatalogger0@gmail.com' 
 app.config['MAIL_PASSWORD'] = 'cndofvbtuxamnvom'
 
+# ### NEW: Supabase Storage Config ###
+# You can find these in Supabase Dashboard > Settings > API
+SUPABASE_URL = "https://qditrhotokqilstiswex.supabase.co" 
+SUPABASE_KEY = "YOUR_SUPABASE_SERVICE_ROLE_KEY" # <--- REPLACE THIS with your actual Service Role Key!
+
+# Initialize Supabase Client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 db = SQLAlchemy(app)
-mail = Mail(app) # Initialize Mail
+mail = Mail(app)
 migrate = Migrate(app, db)
 
 # --- DATABASE MODELS ---
@@ -91,8 +93,7 @@ class Device(db.Model):
     machine_model = db.Column(db.String(50))
     machine_type = db.Column(db.String(50))  
     log_folders = db.relationship('LogFolder', backref='device', lazy=True, cascade="all, delete-orphan")
-    last_sync = db.Column(db.DateTime)  # Add this field
-
+    last_sync = db.Column(db.DateTime) 
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -103,13 +104,13 @@ class User(db.Model):
     full_name = db.Column(db.String(120))
     email = db.Column(db.String(120), unique=True, nullable=False)
     company = db.Column(db.String(120))
-    dob = db.Column(db.String(50)) # Date of Birth
+    dob = db.Column(db.String(50))
     birth_place = db.Column(db.String(120))
     mobile_number = db.Column(db.String(50))
     address = db.Column(db.String(255))
     reset_token = db.Column(db.String(100), unique=True)
     reset_token_expiration = db.Column(db.DateTime)
-	
+    
 class LogFolder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), nullable=False)
@@ -124,7 +125,7 @@ class LogFile(db.Model):
     folder_id = db.Column(db.Integer, db.ForeignKey('log_folder.id'), nullable=False)
 
 
-# --- DECORATORS (Security Guards) ---
+# --- DECORATORS ---
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -134,7 +135,6 @@ def token_required(f):
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             current_user = User.query.get(data['user_id'])
-            # Add this check to handle cases where the user ID in the token no longer exists
             if current_user is None:
                 return jsonify({'message': 'User not found!'}), 401
         except Exception as e:
@@ -150,11 +150,11 @@ def admin_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
-# --- NEW: PROFILE & PASSWORD ENDPOINTS ---
+# --- ROUTES ---
+
 @app.route("/api/profile", methods=['GET'])
 @token_required
 def get_profile(current_user):
-    """Returns the current user's profile information."""
     return jsonify({
         'full_name': current_user.full_name, 'email': current_user.email,
         'company': current_user.company, 'dob': current_user.dob,
@@ -165,17 +165,14 @@ def get_profile(current_user):
 @app.route("/api/profile", methods=['PUT'])
 @token_required
 def update_profile(current_user):
-    """Updates the current user's profile information."""
     data = request.get_json()
     try:
-        # Update fields if they are provided in the request
         current_user.full_name = data.get('full_name', current_user.full_name)
         current_user.email = data.get('email', current_user.email)
         current_user.dob = data.get('dob', current_user.dob)
         current_user.birth_place = data.get('birth_place', current_user.birth_place)
         current_user.mobile_number = data.get('mobile_number', current_user.mobile_number)
         current_user.address = data.get('address', current_user.address)
-        # This is the crucial line that saves the changes
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -185,7 +182,6 @@ def update_profile(current_user):
 @app.route("/api/change-password", methods=['POST'])
 @token_required
 def change_password(current_user):
-    """Changes the current user's password."""
     data = request.get_json()
     if not data or 'current_password' not in data or 'new_password' not in data:
         return jsonify({'message': 'Current and new passwords are required.'}), 400
@@ -195,13 +191,10 @@ def change_password(current_user):
     db.session.commit()
     return jsonify({'message': 'Password changed successfully.'})
 
-# Serve HTML files from the project root (adjust 'frontend' if your HTML is in a subfolder)
 @app.route('/<path:filename>')
 def serve_html(filename):
-    # Assuming HTML files are in a 'frontend' folder relative to app.py (adjust path as needed)
-    return send_from_directory('../', filename)  # '..' goes up to project root if backend/ is subfolder
+    return send_from_directory('../', filename)
 
-# Or for root: Serve HomePage.html specifically
 @app.route('/')
 def root():
     return send_from_directory('../', 'login.html')
@@ -210,7 +203,6 @@ def root():
 def home():
     return send_from_directory('../', 'HomePage.html')
 
-# --- AUTHENTICATION & ADMIN API ENDPOINTS ---
 @app.route("/api/live-data", methods=['POST'])
 def receive_live_data():
     data = request.get_json()
@@ -218,12 +210,39 @@ def receive_live_data():
         return jsonify({"message": "Invalid data"}), 400
     
     print(f"Received data from device {data['device_id']}: {data}")
-    
-    # Emit a 'new_data' event to all connected browsers
-    # We send it on a channel specific to the device_id
     socketio.emit(f'device_update_{data["device_id"]}', data)
-    
     return jsonify({"message": "Data received"}), 200
+
+# ### NEW: Storage Upload Endpoint ###
+@app.route("/api/upload-log", methods=['POST'])
+def upload_log():
+    # 1. Check if file is present in request
+    if 'file' not in request.files:
+        return jsonify({"message": "No file part in the request"}), 400
+    
+    file = request.files['file']
+    filename = file.filename
+    
+    # 2. Upload to Supabase Storage
+    try:
+        file_content = file.read()
+        bucket_name = "device-logs" # Make sure this bucket exists in Supabase!
+        
+        # This uploads the file to the bucket
+        # Note: You might want to prefix filename with device_id to organize files
+        # e.g., path = f"{device_id}/{filename}"
+        response = supabase.storage.from_(bucket_name).upload(
+            path=filename, 
+            file=file_content,
+            file_options={"content-type": "text/csv"} # Adjust mime-type if needed
+        )
+        
+        return jsonify({"message": "Upload successful", "path": filename}), 200
+        
+    except Exception as e:
+        print(f"Storage Upload Error: {str(e)}")
+        return jsonify({"message": f"Storage upload failed: {str(e)}"}), 500
+
 
 @app.route("/api/register", methods=["POST"])
 def register():
@@ -264,45 +283,33 @@ def forgot_password():
     if not user:
         return jsonify({'message': 'This email address is not registered.'}), 404
 
-    # Generate a simple, secure, one-time use token
     reset_token = secrets.token_urlsafe(32)
     expiration = datetime.now(timezone.utc) + timedelta(minutes=15)
     
-    # Save the token and its expiration to the user's record
     user.reset_token = reset_token
     user.reset_token_expiration = expiration
     db.session.commit()
 
-    # Get the base URL for the frontend from an environment variable.
-    # It defaults to your local setup if the variable isn't set.
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://127.0.0.1:5500')
     reset_url = f"{FRONTEND_URL}/reset_password.html?token={reset_token}"
 
     msg = Message('Password Reset Request', sender=app.config['MAIL_USERNAME'], recipients=[user.email])
-    # Set the email body to an attractive HTML template with a hyperlink
     msg.html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }}
-            .container {{ width: 90%; max-width: 600px; margin: 20px auto; padding: 30px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
-            .header {{ font-size: 24px; font-weight: bold; text-align: center; margin-bottom: 20px; color: #0056b3; }}
-            .button {{ display: inline-block; padding: 12px 25px; margin: 20px 0; font-size: 16px; font-weight: bold; color: #fff !important; background-color: #007bff; text-decoration: none; border-radius: 5px; text-align: center; }}
-            .footer {{ font-size: 12px; color: #777; text-align: center; margin-top: 20px; }}
-            p {{ margin-bottom: 15px; }}
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            .container {{ width: 90%; max-width: 600px; margin: 20px auto; padding: 30px; }}
+            .button {{ display: inline-block; padding: 12px 25px; background-color: #007bff; color: #fff; text-decoration: none; border-radius: 5px; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <div class="header">Password Reset Request</div>
+            <h3>Password Reset Request</h3>
             <p>Hello {user.full_name},</p>
-            <p>We received a request to reset the password for your account associated with this email address. To proceed, please click the button below:</p>
+            <p>Click below to reset your password:</p>
             <a href="{reset_url}" class="button">Reset Your Password</a>
-            <p>This link is valid for 15 minutes. If you did not request a password reset, please ignore this email or contact support if you have concerns.</p>
-            <div class="footer">
-                <p>&copy; {datetime.now().year} ESP32 Data Logger. All rights reserved.</p>
-            </div>
         </div>
     </body>
     </html>
@@ -328,15 +335,12 @@ def reset_password():
     if not token or not new_password:
         return jsonify({'message': 'Token and new password are required.'}), 400
 
-    # Find user by the one-time token and check if it has expired
     user = User.query.filter_by(reset_token=token).first()
     
     if not user or user.reset_token_expiration < datetime.now(timezone.utc):
         return jsonify({'message': 'Token is invalid or has expired. Please request a new one.'}), 401
     
-    # Set the new password
     user.password_hash = generate_password_hash(new_password)
-    # IMPORTANT: Invalidate the token by clearing it from the database
     user.reset_token = None
     user.reset_token_expiration = None
     db.session.commit()
@@ -380,7 +384,6 @@ def delete_user(current_user, user_id):
     return jsonify({'message': f'User {user.username} deleted'})
 
 
-# --- DATA API ENDPOINTS ---
 @app.route("/api/devices")
 @token_required
 def get_devices(current_user):
@@ -422,18 +425,5 @@ def get_files_in_folder(current_user, folder_id):
     files = [{'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified} for f in folder.files]
     return jsonify(files)
 
-# --- MAIN EXECUTION ---
-
-#if __name__ == "__main__":
-#    socketio.run(app, debug=True)
-
 if __name__ == "__main__":
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
-    
-# if __name__ == "__main__":
-#     # Running without the reloader is more stable for Socket.IO
-#     # The reloader can cause connection issues and empty responses.
-#     print("Starting Flask-SocketIO server on http://127.0.0.1:5000")
-#     # Added debug=True to enable the Werkzeug debugger for detailed error logs in the console.
-
-#     socketio.run(app, host='127.0.0.1', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
