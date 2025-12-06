@@ -14,6 +14,7 @@ from flask_socketio import SocketIO
 from flask_migrate import Migrate
 import os # <-- ADD THIS IMPORT
 from flask import send_from_directory  # Add this for serving files from a directory
+import urllib.parse
 
 # --- ROBUST PATH CONFIGURATION ---
 # Get the absolute path of the directory where this script is located (backend/)
@@ -57,8 +58,9 @@ def handle_exception(e):
 
 # --- CONFIGURATION ---
 app.config['SECRET_KEY'] = 'your-super-secret-key-that-no-one-should-know'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'    # uncomment when you want tot use this internal
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'    # uncomment when you want tot use this internal
 #app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://telematics_db_user:g5hivFFZWhCxkbAmOum07GoL2BMm1qPf@dpg-d44o0tkhg0os73fitedg-a/telematics_db'        # this used for render make it run on live
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres.qditrhotokqilstiswex:Hardik%40123@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -433,4 +435,5 @@ if __name__ == "__main__":
 #     # The reloader can cause connection issues and empty responses.
 #     print("Starting Flask-SocketIO server on http://127.0.0.1:5000")
 #     # Added debug=True to enable the Werkzeug debugger for detailed error logs in the console.
+
 #     socketio.run(app, host='127.0.0.1', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
