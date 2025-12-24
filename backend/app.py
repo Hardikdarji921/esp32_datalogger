@@ -168,7 +168,6 @@ def update_profile(current_user):
     data = request.get_json()
     try:
         current_user.full_name = data.get('full_name', current_user.full_name)
-        current_user.email = data.get('email', current_user.email)
         current_user.dob = data.get('dob', current_user.dob)
         current_user.birth_place = data.get('birth_place', current_user.birth_place)
         current_user.mobile_number = data.get('mobile_number', current_user.mobile_number)
@@ -263,7 +262,7 @@ def register():
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.get_json()
-    user = User.query.filter_by(username=data.get('username')).first()
+    user = User.query.filter_by(email=data.get('email')).first() 
     if not user or not check_password_hash(user.password_hash, data.get('password')):
         return jsonify({"message": "Invalid credentials"}), 401
     if not user.is_active:

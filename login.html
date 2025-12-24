@@ -22,8 +22,8 @@
             
             <form id="login-form" class="space-y-6">
                 <div>
-                    <label for="username" class="text-sm font-medium text-gray-400">Username</label>
-                    <input type="text" id="username" name="username" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., hardik" required>
+                    <label for="email" class="text-sm font-medium text-gray-400">Email ID</label>
+                    <input type="email" id="email" name="email" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., user@example.com" required>
                 </div>
                 
                 <div>
@@ -54,7 +54,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const loginForm = document.getElementById('login-form');
-            const usernameInput = document.getElementById('username');
+            const emailInput = document.getElementById('email');
             const passwordInput = document.getElementById('password');
             const errorMessage = document.getElementById('error-message');
 
@@ -63,7 +63,7 @@
                 event.preventDefault();
                 errorMessage.textContent = ''; // Clear previous errors
 
-                const username = usernameInput.value;
+                const email = emailInput.value;
                 const password = passwordInput.value;
 
                 // Send the data to the backend API
@@ -73,7 +73,7 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        username: username,
+                        email: email,
                         password: password,
                     }),
                 })
