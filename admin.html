@@ -50,139 +50,283 @@
       </div>
       <a href="HomePage.html" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors">&larr; Back to Dashboard</a>
     </header>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h2 class="text-2xl font-bold text-yellow-400 mb-4">Pending Approval</h2>
-        <div id="pendingUsers" class="space-y-4"></div>
+    
+    <!-- Search and Filters -->
+    <div class="mb-6 bg-gray-800 p-4 rounded-xl border border-gray-700">
+      <div class="flex flex-col md:flex-row gap-4">
+        <input type="text" id="searchInput" placeholder="Search users..." class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+        <select id="roleFilter" class="p-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+          <option value="">All Roles</option>
+          <option value="admin">Admin</option>
+          <option value="production">Production</option>
+          <option value="proto">Proto</option>
+          <option value="custom">Custom</option>
+        </select>
       </div>
-      <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h2 class="text-2xl font-bold text-green-400 mb-4">Active Users</h2>
-        <div id="activeUsers" class="space-y-4"></div>
+    </div>
+    
+    <!-- User List -->
+    <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+      <h2 class="text-2xl font-bold text-white mb-4">All Users</h2>
+      <div id="usersTable" class="overflow-x-auto">
+        <table class="w-full text-sm text-left text-gray-300">
+          <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+            <tr>
+              <th class="px-6 py-3">Username</th>
+              <th class="px-6 py-3">Email</th>
+              <th class="px-6 py-3">Role</th>
+              <th class="px-6 py-3">Registration Date</th>
+              <th class="px-6 py-3">Last Login</th>
+              <th class="px-6 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <!-- Users will be populated here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  
+  <!-- User Details Modal -->
+  <div id="userModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+      <div class="bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-white">User Details</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-white">&times;</button>
+          </div>
+          <div id="userDetailsContent">
+            <!-- User details will be populated here -->
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <script>
-	
     const token = localStorage.getItem('token');
+    let allUsers = [];
 
-    // Function to create the HTML for a user card
-    function createUserCard(user) {
-        const card = document.createElement('div');
-        card.className = 'bg-gray-700 p-4 rounded-lg shadow-md';
+    // Function to create table row for a user
+    function createUserRow(user) {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-700 hover:bg-gray-700';
         
-        const approveButton = !user.is_active 
-            ? `<button onclick="approveUser(${user.id})" class="action-btn approve-btn">Approve</button>` 
-            : '';
-        const deleteButton = user.role !== 'admin' 
-            ? `<button onclick="deleteUser(${user.id})" class="action-btn delete-btn">Delete</button>` 
-            : '';
+        const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
+        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never';
+        
+        row.innerHTML = `
+            <td class="px-6 py-4 font-medium text-white">${user.username}</td>
+            <td class="px-6 py-4 text-gray-300">${user.email}</td>
+            <td class="px-6 py-4">
+                <span class="px-2 py-1 text-xs font-semibold rounded-full 
+                    ${user.role === 'admin' ? 'bg-red-500 text-white' : 
+                      user.role === 'production' ? 'bg-blue-500 text-white' : 
+                      user.role === 'proto' ? 'bg-green-500 text-white' : 
+                      'bg-purple-500 text-white'}">
+                    ${user.role}
+                </span>
+            </td>
+            <td class="px-6 py-4 text-gray-300">${createdAt}</td>
+            <td class="px-6 py-4 text-gray-300">${lastLogin}</td>
+            <td class="px-6 py-4">
+                <button onclick="showUserDetails(${user.id})" class="text-indigo-400 hover:text-indigo-300 mr-2">View</button>
+                ${user.role !== 'admin' ? `<button onclick="deleteUser(${user.id})" class="text-red-400 hover:text-red-300">Delete</button>` : ''}
+            </td>
+        `;
+        return row;
+    }
 
-        card.innerHTML = `
-            <div class="flex justify-between items-start gap-4">
-                <!-- User Info: Added min-w-0 to allow shrinking and truncate for long text -->
-                <div class="min-w-0">
-                    <h4 class="text-lg font-bold text-white truncate" title="${user.full_name} (@${user.username})">${user.full_name} <span class="text-gray-400 font-normal">(@${user.username})</span></h4>
-                    <p class="text-sm text-gray-300 truncate" title="${user.email}">${user.email}</p>
-                    <p class="text-sm text-gray-400 truncate" title="${user.company || ''}">${user.company || 'No company specified'}</p>
+    // Function to show user details modal
+    async function showUserDetails(userId) {
+        const user = allUsers.find(u => u.id === userId);
+        if (!user) return;
+
+        const modal = document.getElementById('userModal');
+        const content = document.getElementById('userDetailsContent');
+        
+        // Get user permissions
+        let permissions = [];
+        try {
+            const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}/permissions`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                }
+            });
+            if (response.ok) {
+                permissions = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to fetch permissions:', error);
+        }
+
+        const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
+        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never';
+
+        content.innerHTML = `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Username</label>
+                        <p class="text-white">${user.username}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Email</label>
+                        <p class="text-white">${user.email}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Full Name</label>
+                        <p class="text-white">${user.full_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Company</label>
+                        <p class="text-white">${user.company || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Registration Date</label>
+                        <p class="text-white">${createdAt}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Last Login</label>
+                        <p class="text-white">${lastLogin}</p>
+                    </div>
                 </div>
-                <!-- Action Buttons -->
-                <div class="flex-shrink-0 flex items-center space-x-2">
-                    ${approveButton}
-                    ${deleteButton}
-                    <button onclick="toggleDetails(this)" class="action-btn details-btn">Details &darr;</button>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Access Level</label>
+                    <select id="roleSelect" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white" onchange="updateUserRole(${user.id}, this.value)">
+                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin - Full access</option>
+                        <option value="production" ${user.role === 'production' ? 'selected' : ''}>Production - Limited machines</option>
+                        <option value="proto" ${user.role === 'proto' ? 'selected' : ''}>Proto - All machines, read-only</option>
+                        <option value="custom" ${user.role === 'custom' ? 'selected' : ''}>Custom - Configurable access</option>
+                    </select>
                 </div>
-            </div>
-            <!-- Collapsible Details -->
-            <div class="details-content mt-4 pt-4 border-t border-gray-600" style="display: none;">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    <div><strong class="text-gray-400">DOB:</strong> <span class="text-gray-200">${user.dob || 'N/A'}</span></div>
-                    <div><strong class="text-gray-400">Birth Place:</strong> <span class="text-gray-200">${user.birth_place || 'N/A'}</span></div>
-                    <div><strong class="text-gray-400">Mobile:</strong> <span class="text-gray-200">${user.mobile_number || 'N/A'}</span></div>
-                    <div><strong class="text-gray-400">Address:</strong> <span class="text-gray-200">${user.address || 'N/A'}</span></div>
+                
+                ${user.role === 'custom' || user.role === 'production' ? `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Machine Permissions</label>
+                    <div id="permissionsContent" class="space-y-2">
+                        ${permissions.map(p => `
+                            <div class="bg-gray-700 p-2 rounded">
+                                <strong class="text-white">${p.device_name}</strong>
+                                <div class="text-sm text-gray-300">Visible data: ${p.visible_data.join(', ') || 'All'}</div>
+                            </div>
+                        `).join('') || '<p class="text-gray-400">No specific permissions set</p>'}
+                    </div>
                 </div>
+                ` : ''}
             </div>
         `;
-        return card;
+        
+        modal.classList.remove('hidden');
     }
 
-    // Function to toggle visibility of user details
-    function toggleDetails(button) {
-        const content = button.closest('.bg-gray-700').querySelector('.details-content');
-        if (content.style.display === 'none') {
-            content.style.display = 'block';
-            button.innerHTML = 'Details &uarr;';
-        } else {
-            content.style.display = 'none';
-            button.innerHTML = 'Details &darr;';
-        }
+    // Function to close modal
+    function closeModal() {
+        document.getElementById('userModal').classList.add('hidden');
     }
 
-    // Fetch and display all users
-    async function fetchUsers() {
-        const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-access-token': token
-            }
-        });
-
-        if (!response.ok) {
-            console.error('Failed to fetch users:', response.statusText);
-            return;
-        }
-
-        const users = await response.json();
-        const pendingUsersContainer = document.getElementById('pendingUsers');
-        const activeUsersContainer = document.getElementById('activeUsers');
-
-        pendingUsersContainer.innerHTML = '';
-        activeUsersContainer.innerHTML = '';
-
-        users.forEach(user => {
-            const userCard = createUserCard(user);
-            if (user.is_active) {
-                activeUsersContainer.appendChild(userCard);
+    // Function to update user role
+    async function updateUserRole(userId, newRole) {
+        try {
+            const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}/role`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                },
+                body: JSON.stringify({ role: newRole })
+            });
+            
+            if (response.ok) {
+                // Refresh users list
+                fetchUsers();
+                // Close and reopen modal to refresh details
+                closeModal();
             } else {
-                pendingUsersContainer.appendChild(userCard);
+                alert('Failed to update user role');
             }
-        });
-    }
-
-    // Approve a user
-    async function approveUser(userId) {
-        const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/approve/${userId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-access-token': token
-            }
-        });
-
-        if (response.ok) {
-            fetchUsers();
-        } else {
-            console.error('Failed to approve user:', response.statusText);
+        } catch (error) {
+            console.error('Error updating role:', error);
+            alert('Error updating user role');
         }
     }
 
-    // Delete a user
+    // Function to delete user
     async function deleteUser(userId) {
         if (!confirm('Are you sure you want to delete this user?')) return;
 
-        const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-access-token': token
+        try {
+            const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                }
+            });
+
+            if (response.ok) {
+                fetchUsers();
+            } else {
+                alert('Failed to delete user');
             }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            alert('Error deleting user');
+        }
+    }
+
+    // Function to fetch and display all users
+    async function fetchUsers() {
+        try {
+            const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                }
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch users');
+                return;
+            }
+
+            allUsers = await response.json();
+            displayUsers(allUsers);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    }
+
+    // Function to display users in table
+    function displayUsers(users) {
+        const tbody = document.getElementById('usersTableBody');
+        tbody.innerHTML = '';
+
+        users.forEach(user => {
+            const row = createUserRow(user);
+            tbody.appendChild(row);
+        });
+    }
+
+    // Function to filter users
+    function filterUsers() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const roleFilter = document.getElementById('roleFilter').value;
+
+        const filteredUsers = allUsers.filter(user => {
+            const matchesSearch = user.username.toLowerCase().includes(searchTerm) || 
+                                user.email.toLowerCase().includes(searchTerm) ||
+                                (user.full_name && user.full_name.toLowerCase().includes(searchTerm));
+            const matchesRole = !roleFilter || user.role === roleFilter;
+            return matchesSearch && matchesRole;
         });
 
-        if (response.ok) {
-            fetchUsers();
-        } else {
-            console.error('Failed to delete user:', response.statusText);
-        }
+        displayUsers(filteredUsers);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -190,8 +334,29 @@
             window.location.href = 'login.html';
         } else {
             fetchUsers();
+            
+            // Add event listeners for search and filter
+            document.getElementById('searchInput').addEventListener('input', filterUsers);
+            document.getElementById('roleFilter').addEventListener('change', filterUsers);
         }
     });
   </script>
+
+  <!-- User Details Modal -->
+  <div id="userModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+        <h2 class="text-xl font-semibold text-white">User Details</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div id="userDetailsContent" class="p-6">
+        <!-- Content will be populated by JavaScript -->
+      </div>
+    </div>
+  </div>
 </body>
 </html>

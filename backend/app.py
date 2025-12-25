@@ -99,8 +99,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(50), nullable=False, default='user')
-    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='proto')  # admin, production, proto, custom
     full_name = db.Column(db.String(120))
     email = db.Column(db.String(120), unique=True, nullable=False)
     company = db.Column(db.String(120))
@@ -110,6 +109,8 @@ class User(db.Model):
     address = db.Column(db.String(255))
     reset_token = db.Column(db.String(100), unique=True)
     reset_token_expiration = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    last_login = db.Column(db.DateTime)
     
 class LogFolder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -123,6 +124,13 @@ class LogFile(db.Model):
     size = db.Column(db.String(50))
     modified = db.Column(db.String(50))
     folder_id = db.Column(db.Integer, db.ForeignKey('log_folder.id'), nullable=False)
+
+
+class UserMachine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
+    visible_data = db.Column(db.Text)  # JSON string of visible data fields
 
 
 # --- DECORATORS ---
@@ -254,10 +262,10 @@ def register():
         return jsonify({"message": "Username or email already exists"}), 409
     
     hashed_password = generate_password_hash(password)
-    new_user = User(username=username, password_hash=hashed_password, full_name=full_name, email=email, company=data.get('company'))
+    new_user = User(username=username, password_hash=hashed_password, full_name=full_name, email=email, company=data.get('company'), role='proto')
     db.session.add(new_user)
     db.session.commit()
-    return jsonify({"message": "Registration successful! Your account is pending admin approval."}), 201
+    return jsonify({"message": "Registration successful! You can now log in."}), 201
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -265,8 +273,8 @@ def login():
     user = User.query.filter_by(email=data.get('email')).first() 
     if not user or not check_password_hash(user.password_hash, data.get('password')):
         return jsonify({"message": "Invalid credentials"}), 401
-    if not user.is_active:
-        return jsonify({"message": "Your account is pending approval by an administrator."}), 403
+    user.last_login = datetime.now(timezone.utc)
+    db.session.commit()
     payload = {'user_id': user.id, 'role': user.role, 'exp': datetime.now(timezone.utc) + timedelta(hours=24)}
     token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
     return jsonify({'token': token})
@@ -355,21 +363,13 @@ def get_all_users(current_user):
     output = []
     for u in users:
         output.append({
-            'id': u.id, 'username': u.username, 'role': u.role, 'is_active': u.is_active, 
+            'id': u.id, 'username': u.username, 'role': u.role, 
             'full_name': u.full_name, 'email': u.email, 'company': u.company,
-            'dob': u.dob, 'birth_place': u.birth_place, 'mobile_number': u.mobile_number, 'address': u.address
+            'dob': u.dob, 'birth_place': u.birth_place, 'mobile_number': u.mobile_number, 'address': u.address,
+            'created_at': u.created_at.isoformat() if u.created_at else None,
+            'last_login': u.last_login.isoformat() if u.last_login else None
         })
     return jsonify(output)
-
-@app.route("/api/admin/approve/<int:user_id>", methods=['POST'])
-@token_required
-@admin_required
-def approve_user(current_user, user_id):
-    user = User.query.get(user_id)
-    if not user: return jsonify({'message': 'User not found'}), 404
-    user.is_active = True
-    db.session.commit()
-    return jsonify({'message': f'User {user.username} approved'})
 
 @app.route("/api/admin/users/<int:user_id>", methods=['DELETE'])
 @token_required
@@ -382,14 +382,85 @@ def delete_user(current_user, user_id):
     db.session.commit()
     return jsonify({'message': f'User {user.username} deleted'})
 
+@app.route("/api/admin/users/<int:user_id>/role", methods=['PUT'])
+@token_required
+@admin_required
+def update_user_role(current_user, user_id):
+    user = User.query.get(user_id)
+    if not user: return jsonify({'message': 'User not found'}), 404
+    
+    data = request.get_json()
+    new_role = data.get('role')
+    if new_role not in ['admin', 'production', 'proto', 'custom']:
+        return jsonify({'message': 'Invalid role'}), 400
+    
+    user.role = new_role
+    db.session.commit()
+    return jsonify({'message': f'User role updated to {new_role}'})
+
+@app.route("/api/admin/users/<int:user_id>/permissions", methods=['GET', 'PUT'])
+@token_required
+@admin_required
+def manage_user_permissions(current_user, user_id):
+    user = User.query.get(user_id)
+    if not user: return jsonify({'message': 'User not found'}), 404
+    
+    if request.method == 'GET':
+        permissions = UserMachine.query.filter_by(user_id=user_id).all()
+        result = []
+        for perm in permissions:
+            device = Device.query.get(perm.device_id)
+            result.append({
+                'device_id': perm.device_id,
+                'device_name': device.name if device else 'Unknown',
+                'visible_data': json.loads(perm.visible_data or '[]')
+            })
+        return jsonify(result)
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        device_id = data.get('device_id')
+        visible_data = data.get('visible_data', [])
+        
+        # Remove existing permission for this device
+        UserMachine.query.filter_by(user_id=user_id, device_id=device_id).delete()
+        
+        # Add new permission
+        if visible_data:
+            new_perm = UserMachine(user_id=user_id, device_id=device_id, visible_data=json.dumps(visible_data))
+            db.session.add(new_perm)
+        
+        db.session.commit()
+        return jsonify({'message': 'Permissions updated'})
+
 
 @app.route("/api/devices")
 @token_required
 def get_devices(current_user):
-    devices = Device.query.all()
+    all_devices = Device.query.all()
     result = []
+    
+    if current_user.role == 'admin':
+        # Admin sees all devices
+        devices = all_devices
+    elif current_user.role == 'proto':
+        # Proto sees all devices
+        devices = all_devices
+    elif current_user.role == 'production':
+        # Production sees only assigned devices
+        user_machines = UserMachine.query.filter_by(user_id=current_user.id).all()
+        device_ids = [um.device_id for um in user_machines]
+        devices = Device.query.filter(Device.id.in_(device_ids)).all()
+    elif current_user.role == 'custom':
+        # Custom sees assigned devices with filtered data
+        user_machines = UserMachine.query.filter_by(user_id=current_user.id).all()
+        device_ids = [um.device_id for um in user_machines]
+        devices = Device.query.filter(Device.id.in_(device_ids)).all()
+    else:
+        devices = []
+    
     for d in devices:
-        result.append({
+        device_data = {
             "id": d.id,
             "name": d.name,
             "serial": d.serial,
@@ -405,7 +476,21 @@ def get_devices(current_user):
             "machine_model": d.machine_model,
             "machine_type": d.machine_type,
             "lastSync": d.last_sync.isoformat() if d.last_sync else None,
-        })
+        }
+        
+        # For custom users, filter the visible data
+        if current_user.role == 'custom':
+            user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=d.id).first()
+            if user_machine:
+                visible_fields = json.loads(user_machine.visible_data or '[]')
+                # Filter parameters to only show visible fields
+                filtered_params = {k: v for k, v in device_data["parameters"].items() if k in visible_fields}
+                device_data["parameters"] = filtered_params
+                # Filter displayParameters
+                device_data["displayParameters"] = [p for p in device_data["displayParameters"] if p in visible_fields]
+        
+        result.append(device_data)
+    
     return jsonify(result)
 
 @app.route("/api/devices/<int:device_id>/logs")

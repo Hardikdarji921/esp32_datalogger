@@ -83,11 +83,11 @@ with app.app_context():
     # --- Add Users ---
     print("Adding user data...")
     admin_pass_hash = generate_password_hash("adminpassword")
-    admin_user = User(username="admin", password_hash=admin_pass_hash, role="admin", is_active=True, full_name="Administrator", email="admin@example.com", company="Admin Corp")
+    admin_user = User(username="admin", password_hash=admin_pass_hash, role="admin", full_name="Administrator", email="admin@example.com", company="Admin Corp")
     db.session.add(admin_user)
 
     hardik_pass_hash = generate_password_hash("testpassword123")
-    hardik_user = User(username="hardik", password_hash=hardik_pass_hash, role="user", is_active=True, full_name="Hardik", email="hardik@example.com", company="Ammann Group")
+    hardik_user = User(username="hardik", password_hash=hardik_pass_hash, role="proto", full_name="Hardik", email="hardik@example.com", company="Ammann Group")
     db.session.add(hardik_user)
     
     # --- Add Log Folders and Files ---
