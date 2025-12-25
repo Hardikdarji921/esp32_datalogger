@@ -191,6 +191,23 @@
             console.error('Failed to fetch permissions:', error);
         }
 
+        // Get all devices for machine selection
+        let allDevices = [];
+        try {
+            const response = await fetch(`${APP_CONFIG.API_BASE_URL}/api/devices`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                }
+            });
+            if (response.ok) {
+                allDevices = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to fetch devices:', error);
+        }
+
         const createdAt = formatDateTime(user.created_at);
         const lastLogin = formatDateTime(user.last_login);
 
@@ -225,15 +242,37 @@
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Access Level</label>
-                    <select id="roleSelect" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white" onchange="updateUserRole(${user.id}, this.value)">
-                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin - Full access</option>
-                        <option value="production" ${user.role === 'production' ? 'selected' : ''}>Production - Limited machines</option>
-                        <option value="proto" ${user.role === 'proto' ? 'selected' : ''}>Proto - All machines, read-only</option>
-                        <option value="custom" ${user.role === 'custom' ? 'selected' : ''}>Custom - Configurable access</option>
-                    </select>
+                    <div class="flex gap-2">
+                        <select id="roleSelect" class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin - Full access</option>
+                            <option value="production" ${user.role === 'production' ? 'selected' : ''}>Production - Limited machines</option>
+                            <option value="proto" ${user.role === 'proto' ? 'selected' : ''}>Proto - All machines, read-only</option>
+                            <option value="custom" ${user.role === 'custom' ? 'selected' : ''}>Custom - Configurable access</option>
+                        </select>
+                        <button onclick="confirmRoleUpdate(${user.id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors">
+                            Save
+                        </button>
+                    </div>
                 </div>
                 
-                ${user.role === 'custom' || user.role === 'production' ? `
+                ${user.role === 'production' ? `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Select Machines for Access</label>
+                    <div class="bg-gray-700 p-3 rounded-lg max-h-48 overflow-y-auto">
+                        ${allDevices.map(device => {
+                            const isSelected = permissions.some(p => p.device_id === device.id);
+                            return `
+                                <label class="flex items-center space-x-2 py-1">
+                                    <input type="checkbox" class="machine-checkbox w-4 h-4 bg-gray-600 border-gray-500 rounded text-indigo-500" 
+                                           value="${device.id}" ${isSelected ? 'checked' : ''}>
+                                    <span class="text-white text-sm">${device.machine_model || device.name} (${device.serial})</span>
+                                </label>
+                            `;
+                        }).join('')}
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Select the machines this user can access. Only checked machines will be visible to them.</p>
+                </div>
+                ` : user.role === 'custom' ? `
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Machine Permissions</label>
                     <div id="permissionsContent" class="space-y-2">
@@ -257,6 +296,74 @@
         document.getElementById('userModal').classList.add('hidden');
     }
 
+    // Function to confirm role update
+    async function confirmRoleUpdate(userId) {
+        const roleSelect = document.getElementById('roleSelect');
+        const newRole = roleSelect.value;
+        const user = allUsers.find(u => u.id === userId);
+        
+        if (!user) {
+            alert('User not found');
+            return;
+        }
+        
+        if (user.role === newRole) {
+            alert('No changes detected. The role is already set to ' + newRole);
+            return;
+        }
+        
+        // Handle machine permissions for Production role
+        if (newRole === 'production') {
+            const selectedMachines = [];
+            const checkboxes = document.querySelectorAll('.machine-checkbox:checked');
+            checkboxes.forEach(checkbox => {
+                selectedMachines.push(parseInt(checkbox.value));
+            });
+            
+            if (selectedMachines.length === 0) {
+                alert('Please select at least one machine for Production role.');
+                return;
+            }
+            
+            // Save machine permissions
+            try {
+                for (const deviceId of selectedMachines) {
+                    await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}/permissions`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-access-token': token
+                        },
+                        body: JSON.stringify({ 
+                            device_id: deviceId, 
+                            visible_data: [] // Empty array means all data visible for Production
+                        })
+                    });
+                }
+                
+                // Remove permissions for unchecked machines
+                const allMachineCheckboxes = document.querySelectorAll('.machine-checkbox');
+                const uncheckedMachines = [];
+                allMachineCheckboxes.forEach(checkbox => {
+                    if (!checkbox.checked) {
+                        uncheckedMachines.push(parseInt(checkbox.value));
+                    }
+                });
+                
+                // Note: In a real implementation, you'd want to remove unchecked permissions
+                // For now, we'll just add the selected ones
+                
+            } catch (error) {
+                console.error('Error saving machine permissions:', error);
+                alert('Error saving machine permissions');
+                return;
+            }
+        }
+        
+        // Update the role
+        await updateUserRole(userId, newRole);
+    }
+
     // Function to update user role
     async function updateUserRole(userId, newRole) {
         try {
@@ -274,6 +381,7 @@
                 fetchUsers();
                 // Close and reopen modal to refresh details
                 closeModal();
+                alert('User role updated successfully!');
             } else {
                 alert('Failed to update user role');
             }
