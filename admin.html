@@ -108,13 +108,41 @@
     const token = localStorage.getItem('token');
     let allUsers = [];
 
+    // Helper function to format date as dd/mm/yyyy
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    }
+
+    // Helper function to format time as hh:mm AM/PM
+    function formatTime(dateString) {
+        if (!dateString) return 'Never';
+        const date = new Date(dateString);
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // the hour '0' should be '12'
+        return `${hours}:${minutes} ${ampm}`;
+    }
+
+    // Helper function to format date and time as dd/mm/yyyy hh:mm AM/PM
+    function formatDateTime(dateString) {
+        if (!dateString) return 'Never';
+        return `${formatDate(dateString)} ${formatTime(dateString)}`;
+    }
+
     // Function to create table row for a user
     function createUserRow(user) {
         const row = document.createElement('tr');
         row.className = 'border-b border-gray-700 hover:bg-gray-700';
         
-        const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
-        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never';
+        const createdAt = formatDate(user.created_at);
+        const lastLogin = formatDateTime(user.last_login);
         
         row.innerHTML = `
             <td class="px-6 py-4 font-medium text-white">${user.username}</td>
@@ -163,8 +191,8 @@
             console.error('Failed to fetch permissions:', error);
         }
 
-        const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
-        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never';
+        const createdAt = formatDateTime(user.created_at);
+        const lastLogin = formatDateTime(user.last_login);
 
         content.innerHTML = `
             <div class="space-y-4">
