@@ -131,6 +131,7 @@ class UserMachine(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     visible_data = db.Column(db.Text)  # JSON string of visible data fields
+    visible_logs = db.Column(db.Text)  # JSON string of visible log folders/files
 
 
 # --- DECORATORS ---
@@ -413,7 +414,8 @@ def manage_user_permissions(current_user, user_id):
             result.append({
                 'device_id': perm.device_id,
                 'device_name': device.name if device else 'Unknown',
-                'visible_data': json.loads(perm.visible_data or '[]')
+                'visible_data': json.loads(perm.visible_data or '[]'),
+                'visible_logs': json.loads(perm.visible_logs or '[]')
             })
         return jsonify(result)
     
@@ -421,13 +423,19 @@ def manage_user_permissions(current_user, user_id):
         data = request.get_json()
         device_id = data.get('device_id')
         visible_data = data.get('visible_data', [])
+        visible_logs = data.get('visible_logs', [])
         
         # Remove existing permission for this device
         UserMachine.query.filter_by(user_id=user_id, device_id=device_id).delete()
         
         # Add new permission
-        if visible_data:
-            new_perm = UserMachine(user_id=user_id, device_id=device_id, visible_data=json.dumps(visible_data))
+        if visible_data or visible_logs:
+            new_perm = UserMachine(
+                user_id=user_id, 
+                device_id=device_id, 
+                visible_data=json.dumps(visible_data),
+                visible_logs=json.dumps(visible_logs)
+            )
             db.session.add(new_perm)
         
         db.session.commit()
@@ -478,6 +486,13 @@ def get_devices(current_user):
             "lastSync": d.last_sync.isoformat() if d.last_sync else None,
         }
         
+        # Include log folders for admin users (needed for permission management)
+        if current_user.role == 'admin':
+            device_data["log_folders"] = [
+                {"id": f.id, "name": f.name, "file_count": len(f.files), "files": [{"id": file.id, "name": file.name, "size": file.size, "modified": file.modified} for file in f.files]}
+                for f in d.log_folders
+            ]
+        
         # For custom users, filter the visible data
         if current_user.role == 'custom':
             user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=d.id).first()
@@ -498,7 +513,30 @@ def get_devices(current_user):
 def get_log_folders(current_user, device_id):
     device = Device.query.get(device_id)
     if not device: return jsonify({"message": "Device not found"}), 404
-    folders = [{'id': f.id, 'name': f.name, 'file_count': len(f.files)} for f in device.log_folders]
+    
+    # Check permissions based on role
+    if current_user.role == 'admin' or current_user.role == 'proto':
+        # Admin and proto see all logs
+        folders = [{'id': f.id, 'name': f.name, 'file_count': len(f.files)} for f in device.log_folders]
+    elif current_user.role == 'production':
+        # Production sees logs for assigned devices
+        user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=device_id).first()
+        if not user_machine:
+            return jsonify({"message": "Access denied"}), 403
+        folders = [{'id': f.id, 'name': f.name, 'file_count': len(f.files)} for f in device.log_folders]
+    elif current_user.role == 'custom':
+        # Custom sees only allowed logs for assigned devices
+        user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=device_id).first()
+        if not user_machine:
+            return jsonify({"message": "Access denied"}), 403
+        visible_logs = json.loads(user_machine.visible_logs or '[]')
+        folders = []
+        for f in device.log_folders:
+            if f.id in visible_logs or f.name in visible_logs:
+                folders.append({'id': f.id, 'name': f.name, 'file_count': len(f.files)})
+    else:
+        return jsonify({"message": "Access denied"}), 403
+    
     return jsonify(folders)
 
 @app.route("/api/logs/<int:folder_id>/files")
@@ -506,7 +544,32 @@ def get_log_folders(current_user, device_id):
 def get_files_in_folder(current_user, folder_id):
     folder = LogFolder.query.get(folder_id)
     if not folder: return jsonify({"message": "Folder not found"}), 404
-    files = [{'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified} for f in folder.files]
+    
+    device = folder.device
+    
+    # Check permissions based on role
+    if current_user.role == 'admin' or current_user.role == 'proto':
+        # Admin and proto see all files
+        files = [{'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified} for f in folder.files]
+    elif current_user.role == 'production':
+        # Production sees files for assigned devices
+        user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=device.id).first()
+        if not user_machine:
+            return jsonify({"message": "Access denied"}), 403
+        files = [{'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified} for f in folder.files]
+    elif current_user.role == 'custom':
+        # Custom sees only allowed files for assigned devices
+        user_machine = UserMachine.query.filter_by(user_id=current_user.id, device_id=device.id).first()
+        if not user_machine:
+            return jsonify({"message": "Access denied"}), 403
+        visible_logs = json.loads(user_machine.visible_logs or '[]')
+        files = []
+        for f in folder.files:
+            if f.id in visible_logs or f.name in visible_logs or folder.id in visible_logs or folder.name in visible_logs:
+                files.append({'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified})
+    else:
+        return jsonify({"message": "Access denied"}), 403
+    
     return jsonify(files)
 
 if __name__ == "__main__":

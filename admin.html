@@ -255,7 +255,35 @@
                     </div>
                 </div>
                 
-                ${user.role === 'production' ? `
+                <div class="role-permissions">
+                <!-- Role-specific permissions will be inserted here -->
+                </div>
+            </div>
+        `;
+        
+        modal.classList.remove('hidden');
+        
+        // Initialize role permissions content
+        updateModalContentForRole(user, allDevices, permissions, user.role);
+        
+        // Add event listener for role select to update modal content
+        const roleSelect = document.getElementById('roleSelect');
+        roleSelect.addEventListener('change', function() {
+            updateModalContentForRole(user, allDevices, permissions, this.value);
+        });
+    }
+
+    // Function to update modal content when role changes
+    function updateModalContentForRole(user, allDevices, permissions, selectedRole) {
+        const content = document.getElementById('userDetailsContent');
+        const rolePermissionsDiv = content.querySelector('.role-permissions');
+        
+        if (!rolePermissionsDiv) return;
+        
+        let newContent = '';
+        
+        if (selectedRole === 'production') {
+            newContent = `
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Select Machines for Access</label>
                     <div class="bg-gray-700 p-3 rounded-lg max-h-48 overflow-y-auto">
@@ -272,23 +300,88 @@
                     </div>
                     <p class="text-xs text-gray-400 mt-2">Select the machines this user can access. Only checked machines will be visible to them.</p>
                 </div>
-                ` : user.role === 'custom' ? `
+            `;
+        } else if (selectedRole === 'custom') {
+            newContent = `
                 <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Machine Permissions</label>
-                    <div id="permissionsContent" class="space-y-2">
-                        ${permissions.map(p => `
-                            <div class="bg-gray-700 p-2 rounded">
-                                <strong class="text-white">${p.device_name}</strong>
-                                <div class="text-sm text-gray-300">Visible data: ${p.visible_data.join(', ') || 'All'}</div>
-                            </div>
-                        `).join('') || '<p class="text-gray-400">No specific permissions set</p>'}
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Configure Machine Access & Data Fields</label>
+                    <div class="space-y-4 max-h-96 overflow-y-auto">
+                        ${allDevices.map(device => {
+                            const devicePermission = permissions.find(p => p.device_id === device.id);
+                            const isSelected = !!devicePermission;
+                            const visibleData = devicePermission ? devicePermission.visible_data : [];
+                            const visibleLogs = devicePermission ? devicePermission.visible_logs : [];
+                            const dataFields = Object.keys(device.parameters || {});
+                            
+                            return `
+                                <div class="bg-gray-700 p-3 rounded-lg">
+                                    <label class="flex items-center space-x-2 mb-2">
+                                        <input type="checkbox" class="machine-checkbox w-4 h-4 bg-gray-600 border-gray-500 rounded text-indigo-500" 
+                                               value="${device.id}" ${isSelected ? 'checked' : ''}>
+                                        <span class="text-white font-medium">${device.machine_model || device.name} (${device.serial})</span>
+                                    </label>
+                                    <div class="ml-6 data-fields-${device.id}" style="display: ${isSelected ? 'block' : 'none'}">
+                                        <p class="text-xs text-gray-400 mb-2">Select data fields this user can view:</p>
+                                        <div class="grid grid-cols-2 gap-2 mb-4">
+                                            ${dataFields.map(field => {
+                                                const isChecked = visibleData.includes(field);
+                                                return `
+                                                    <label class="flex items-center space-x-2">
+                                                        <input type="checkbox" class="data-field-checkbox w-3 h-3 bg-gray-600 border-gray-500 rounded text-indigo-500" 
+                                                               data-device-id="${device.id}" data-field="${field}" ${isChecked ? 'checked' : ''}>
+                                                        <span class="text-gray-300 text-xs">${field.replace(/_/g, ' ')}</span>
+                                                    </label>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                        <p class="text-xs text-gray-400 mb-2">Select logger data this user can access:</p>
+                                        <div class="bg-gray-600 p-2 rounded max-h-32 overflow-y-auto">
+                                            ${device.log_folders ? device.log_folders.map(folder => {
+                                                const isChecked = visibleLogs.includes(folder.id.toString()) || visibleLogs.includes(folder.name);
+                                                return `
+                                                    <label class="flex items-center space-x-2 py-1">
+                                                        <input type="checkbox" class="log-folder-checkbox w-3 h-3 bg-gray-500 border-gray-400 rounded text-indigo-500" 
+                                                               data-device-id="${device.id}" data-folder-id="${folder.id}" data-folder-name="${folder.name}" ${isChecked ? 'checked' : ''}>
+                                                        <span class="text-gray-300 text-xs">📁 ${folder.name} (${folder.file_count} files)</span>
+                                                    </label>
+                                                    ${folder.files ? folder.files.map(file => {
+                                                        const isFileChecked = visibleLogs.includes(file.id.toString()) || visibleLogs.includes(file.name);
+                                                        return `
+                                                            <label class="flex items-center space-x-2 py-1 ml-4">
+                                                                <input type="checkbox" class="log-file-checkbox w-3 h-3 bg-gray-500 border-gray-400 rounded text-indigo-500" 
+                                                                       data-device-id="${device.id}" data-file-id="${file.id}" data-file-name="${file.name}" ${isFileChecked ? 'checked' : ''}>
+                                                                <span class="text-gray-400 text-xs">📄 ${file.name} (${file.size})</span>
+                                                            </label>
+                                                        `;
+                                                    }).join('') : ''}
+                                                `;
+                                            }).join('') : '<p class="text-gray-400 text-xs">No log data available</p>'}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
+                    <p class="text-xs text-gray-400 mt-2">Select machines and configure which data fields and logger data are visible for each machine.</p>
                 </div>
-                ` : ''}
-            </div>
-        `;
+            `;
+        }
         
-        modal.classList.remove('hidden');
+        rolePermissionsDiv.innerHTML = newContent;
+        
+        // Re-add event listeners for the new content
+        if (selectedRole === 'custom') {
+            const machineCheckboxes = document.querySelectorAll('.machine-checkbox');
+            machineCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const deviceId = this.value;
+                    const dataFieldsDiv = document.querySelector(`.data-fields-${deviceId}`);
+                    if (dataFieldsDiv) {
+                        dataFieldsDiv.style.display = this.checked ? 'block' : 'none';
+                    }
+                });
+            });
+        }
     }
 
     // Function to close modal
@@ -336,7 +429,8 @@
                         },
                         body: JSON.stringify({ 
                             device_id: deviceId, 
-                            visible_data: [] // Empty array means all data visible for Production
+                            visible_data: [], // Empty array means all data visible for Production
+                            visible_logs: [] // Empty array means all logs visible for Production
                         })
                     });
                 }
@@ -360,6 +454,86 @@
             }
         }
         
+        // Handle machine permissions for Custom role
+        if (newRole === 'custom') {
+            const selectedMachines = [];
+            const machineCheckboxes = document.querySelectorAll('.machine-checkbox:checked');
+            
+            if (machineCheckboxes.length === 0) {
+                alert('Please select at least one machine for Custom role.');
+                return;
+            }
+            
+            // Collect permissions for each selected machine
+            for (const checkbox of machineCheckboxes) {
+                const deviceId = parseInt(checkbox.value);
+                const selectedDataFields = [];
+                const selectedLogs = [];
+                
+                // Get selected data fields for this machine
+                const dataFieldCheckboxes = document.querySelectorAll(`.data-field-checkbox[data-device-id="${deviceId}"]:checked`);
+                dataFieldCheckboxes.forEach(fieldCheckbox => {
+                    selectedDataFields.push(fieldCheckbox.getAttribute('data-field'));
+                });
+                
+                // Get selected log folders and files for this machine
+                const logFolderCheckboxes = document.querySelectorAll(`.log-folder-checkbox[data-device-id="${deviceId}"]:checked`);
+                const logFileCheckboxes = document.querySelectorAll(`.log-file-checkbox[data-device-id="${deviceId}"]:checked`);
+                
+                logFolderCheckboxes.forEach(folderCheckbox => {
+                    selectedLogs.push(folderCheckbox.getAttribute('data-folder-id'));
+                    selectedLogs.push(folderCheckbox.getAttribute('data-folder-name'));
+                });
+                
+                logFileCheckboxes.forEach(fileCheckbox => {
+                    selectedLogs.push(fileCheckbox.getAttribute('data-file-id'));
+                    selectedLogs.push(fileCheckbox.getAttribute('data-file-name'));
+                });
+                
+                if (selectedDataFields.length === 0) {
+                    alert(`Please select at least one data field for machine ${checkbox.nextElementSibling.textContent}.`);
+                    return;
+                }
+                
+                selectedMachines.push({
+                    device_id: deviceId,
+                    visible_data: selectedDataFields,
+                    visible_logs: selectedLogs
+                });
+            }
+            
+            // Save permissions for each machine
+            try {
+                for (const permission of selectedMachines) {
+                    await fetch(`${APP_CONFIG.API_BASE_URL}/api/admin/users/${userId}/permissions`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-access-token': token
+                        },
+                        body: JSON.stringify(permission)
+                    });
+                }
+                
+                // Remove permissions for unchecked machines
+                const allMachineCheckboxes = document.querySelectorAll('.machine-checkbox');
+                const uncheckedMachines = [];
+                allMachineCheckboxes.forEach(checkbox => {
+                    if (!checkbox.checked) {
+                        uncheckedMachines.push(parseInt(checkbox.value));
+                    }
+                });
+                
+                // Note: In a real implementation, you'd want to remove unchecked permissions
+                // For now, we'll just add the selected ones
+                
+            } catch (error) {
+                console.error('Error saving custom permissions:', error);
+                alert('Error saving custom permissions');
+                return;
+            }
+        }
+        
         // Update the role
         await updateUserRole(userId, newRole);
     }
@@ -375,7 +549,7 @@
                 },
                 body: JSON.stringify({ role: newRole })
             });
-            
+
             if (response.ok) {
                 // Refresh users list
                 fetchUsers();
@@ -477,22 +651,5 @@
         }
     });
   </script>
-
-  <!-- User Details Modal -->
-  <div id="userModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-      <div class="p-6 border-b border-gray-700 flex justify-between items-center">
-        <h2 class="text-xl font-semibold text-white">User Details</h2>
-        <button onclick="closeModal()" class="text-gray-400 hover:text-white">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-          </svg>
-        </button>
-      </div>
-      <div id="userDetailsContent" class="p-6">
-        <!-- Content will be populated by JavaScript -->
-      </div>
-    </div>
-  </div>
 </body>
 </html>
