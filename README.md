@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ESP32 Datalogger
 
 A web-based datalogger using ESP32 for sensor data collection (e.g., via Arduino sketches). Features user auth (login/register), real-time dashboard (`HomePage.html`), and backend logging.
@@ -31,3 +32,6 @@ Fork and PR improvements!
 
 ## License
 MIT (see LICENSE).
+=======
+# esp32_datalogger
+>>>>>>> 2665fd4b96660f8a8580e8f15cc2bdaee47dcbaa
