@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Global Telematics Dashboard</title>
+	<script src="config.js"></script>
+	<link rel="icon" href="/static/images/AMMANNLogo.svg" type="image/svg+xml" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+      body { font-family: "Inter", sans-serif; background-color: #111827; }
+      #map, #detail-map { border-radius: 0.5rem; }
+      #map { height: calc(100vh - 150px); }
+      .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1f2937; color: #e5e7eb; }
+      .status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
+      .status-online { background-color: #10b981; }
+      .status-offline { background-color: #ef4444; }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      .mqtt-status { position: fixed; top: 10px; right: 10px; background: #1f2937; padding: 8px 16px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 8px; z-index: 100; }
+      .mqtt-status.connected { border: 1px solid #10b981; }
+      .mqtt-status.disconnected { border: 1px solid #ef4444; }
+      #ai-toggle-btn { position: fixed; bottom: 20px; right: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 50%; width: 56px; height: 56px; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 1000; }
+      #ai-sidebar { position: fixed; right: -400px; top: 0; width: 400px; height: 100vh; background: #1f2937; box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3); transition: right 0.3s ease; z-index: 1001; display: flex; flex-direction: column; }
+      #ai-sidebar.open { right: 0; }
+      .ai-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #374151; }
+      #ai-chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+      .message { padding: 12px; border-radius: 8px; max-width: 85%; }
+      .user-msg { background: #4f46e5; color: white; align-self: flex-end; }
+      .ai-msg { background: #374151; color: #e5e7eb; align-self: flex-start; }
+      .typing-indicator { display: none; padding: 12px; align-self: flex-start; }
+      .typing-indicator .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out; }
+      @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+      .ai-input-area { padding: 20px; border-top: 1px solid #374151; display: flex; gap: 10px; }
+      #ai-input { flex: 1; background: #374151; border: none; border-radius: 8px; padding: 12px; color: white; }
+    </style>
+  </head>
+  <body class="text-gray-200 min-h-screen flex flex-col">
+    <div id="mqtt-status" class="mqtt-status disconnected">
+      <span class="status-indicator status-offline" id="mqtt-indicator"></span>
+      <span id="mqtt-text">MQTT Disconnected</span>
+    </div>
+
+    <div class="relative z-10 flex-grow flex flex-col">
+      <div class="p-4 sm:p-6 flex-grow flex flex-col">
+        <header class="mb-6 flex justify-between items-center">
+          <div>
+		    <img src="https://www.ammann.com/assets/AmmannLogo.svg" alt="Ammann Logo" class="h-10" />
+            <h1 id="main-title" class="text-3xl font-bold text-white">Global Overview</h1>
+            <p id="main-subtitle" class="text-gray-400">Real-time Fleet Monitoring via MQTT</p>
+          </div>
+          <div class="relative">
+            <button id="profile-btn" class="flex items-center space-x-2 p-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+              <span id="greeting-span" class="text-white font-medium px-2"></span>
+              <svg class="w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg z-20">
+              <div class="py-1">
+                <a href="profile.html" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">Your Profile</a>
+                <a href="contact.html" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">Contact Us</a>
+                <a href="#" id="logout-btn" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">Logout</a>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main id="global-overview">
+          <div class="flex flex-col lg:flex-row gap-6">
+            <div class="lg:w-2/3 w-full"><div id="map"></div></div>
+            <div class="lg:w-1/3 w-full bg-gray-800 p-4 rounded-lg">
+              <h2 class="text-xl font-semibold mb-4 text-white">Device List</h2>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                  <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                    <tr>
+                      <th class="px-4 py-3">Machine Name</th>
+                      <th class="px-4 py-3">Status</th>
+                      <th class="px-4 py-3">Engine Hours</th>
+                      <th class="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="device-list-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <section id="device-detail-view" class="hidden flex-grow flex flex-col">
+          <div class="flex justify-between items-center mb-4">
+            <button id="back-to-overview-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+              Back to Overview
+            </button>
+            <div class="text-right">
+              <p class="text-sm text-gray-400">SD USAGE: <span id="detail-space"></span> | STATUS: <span id="detail-status" class="font-bold"></span></p>
+            </div>
+          </div>
+
+          <div class="bg-gray-800 p-4 rounded-lg mb-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-semibold text-white">Vehicle Parameters</h3>
+              <button id="edit-params-btn" class="text-sm bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg">Edit Parameters</button>
+            </div>
+            <div id="vehicle-params-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-center"></div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-grow">
+            <div class="space-y-6 flex flex-col">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-800 p-4 rounded-lg">
+				<div class="flex flex-col items-center justify-center p-2">
+                  <div class="w-full h-64 rounded-lg overflow-hidden">
+                    <img id="vehicle-image" src="https://via.placeholder.com/400x300.png/1F2937/FFFFFF?text=Vehicle+Image" alt="Vehicle" class="w-full h-full object-contain" />
+                  </div>
+                  <h4 id="machine-name-display" class="font-semibold text-white text-lg mt-2"></h4>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-white mb-2" id="detail-logger-title">Logger Status</h4>
+                  <ul class="text-sm text-gray-300 space-y-2">
+                    <li><strong>Firmware:</strong> <span id="detail-firmware"></span></li>
+                    <li><strong>VIN:</strong> <span id="detail-vin"></span></li>
+                    <li><strong>SD Free (MB):</strong> <span id="detail-free-space"></span></li>
+                    <li><strong>SD Usage:</strong> <span id="detail-sd-usage"></span></li>
+                    <li><strong>Battery:</strong> <span id="detail-battery"></span></li>
+                    <li><strong>Last Update:</strong> <span id="detail-last-sync"></span></li>
+                    <li><strong>Location:</strong> <span id="detail-last-location"></span></li>
+                    <li><strong>Machine Type:</strong> <span id="machine-type-display"></span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="bg-gray-800 p-4 rounded-lg flex-grow flex flex-col">
+                <h4 class="font-semibold text-white mb-2">Live Location</h4>
+                <div id="detail-map" class="flex-grow rounded-lg"></div>
+              </div>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-lg flex flex-col">
+              <div class="flex justify-between items-center mb-4">
+                <h4 class="font-semibold text-white">Diagnostic Data</h4>
+              </div>
+              <div class="space-y-4">
+                <div class="bg-gray-700 p-4 rounded">
+                  <h5 class="text-sm font-semibold text-gray-300 mb-2">Engine DTC</h5>
+                  <p class="text-2xl font-bold text-white" id="engine-dtc">N/A</p>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                  <h5 class="text-sm font-semibold text-gray-300 mb-2">TTC DTC</h5>
+                  <p class="text-2xl font-bold text-white" id="ttc-dtc">N/A</p>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                  <h5 class="text-sm font-semibold text-gray-300 mb-2">WiFi Status</h5>
+                  <p class="text-2xl font-bold text-white" id="wifi-status">N/A</p>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                  <h5 class="text-sm font-semibold text-gray-300 mb-2">Operating Hours</h5>
+                  <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div><p class="text-gray-400">Idle:</p><p class="text-white font-semibold" id="idle-hours">0 h</p></div>
+                    <div><p class="text-gray-400">Work:</p><p class="text-white font-semibold" id="work-hours">0 h</p></div>
+                    <div><p class="text-gray-400">Travel:</p><p class="text-white font-semibold" id="travel-hours">0 h</p></div>
+                    <div><p class="text-gray-400">Vibration:</p><p class="text-white font-semibold" id="vibration-hours">0 h</p></div>
+                    <div><p class="text-gray-400">Heating:</p><p class="text-white font-semibold" id="heating-hours">0 h</p></div>
+                    <div><p class="text-gray-400">Tamper:</p><p class="text-white font-semibold" id="tamper-hours">0 h</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="params-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg relative">
+        <div class="p-6 border-b border-gray-700">
+          <h2 class="text-xl font-semibold text-white">Monitor Live Vehicle Parameters</h2>
+          <p class="text-sm text-gray-400 mt-1">Select parameters to display on the dashboard.</p>
+          <button id="modal-close-btn" class="absolute top-4 right-4 text-gray-500 hover:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <input type="text" id="param-search-input" placeholder="Search Parameters" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-4" />
+          <ul id="modal-param-list" class="space-y-3 max-h-48 overflow-y-auto"></ul>
+        </div>
+        <div class="p-4 bg-gray-900 rounded-b-lg flex justify-end">
+          <button id="modal-next-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const token = localStorage.getItem("token");
+      if (!token) window.location.href = "login.html";
+
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("logout-btn")?.addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem("token");
+          window.location.href = "login.html";
+        });
+
+        function parseJwt(token) {
+          try { return JSON.parse(atob(token.split(".")[1])); } catch (e) { return null; }
+        }
+        const decodedToken = parseJwt(token);
+        if (decodedToken?.role === "admin") {
+          const adminLink = document.createElement("a");
+          adminLink.href = "admin.html";
+          adminLink.className = "block px-4 py-2 text-sm text-yellow-400 hover:bg-gray-600";
+          adminLink.textContent = "Admin Panel";
+          document.querySelector("#profile-dropdown .py-1").prepend(adminLink);
+        }
+
+        const MQTT_HOST = "broker.emqx.io";
+        const MQTT_PORT = 8084;
+        const MQTT_TOPIC = "Datalogger/+/Data";
+        const MQTT_CLIENT_ID = "web_" + Math.random().toString(16).substr(2, 8);
+
+        let devicesData = {};
+        let deviceMarkers = {};
+        let currentDevice = null;
+        let overviewMap = null;
+        let detailMap = null;
+
+        const mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), MQTT_CLIENT_ID);
+
+        mqttClient.onMessageArrived = (message) => {
+          try {
+            const data = JSON.parse(message.payloadString);
+            const deviceID = data.Device_ID;
+            if (!deviceID) return;
+
+            if (!devicesData[deviceID]) {
+              devicesData[deviceID] = {
+                id: deviceID, name: deviceID, serial: deviceID,
+                machine_model: data.machine_model || deviceID,
+                machine_type: data.machine_type || "Unknown",
+                status: data.Engine_status === "ON" ? "Online" : "Offline",
+                lat: parseFloat(data.lat) || 0, lon: parseFloat(data.lon) || 0,
+                firmware: data.ESP_firmware || "N/A", lastUpdate: new Date(),
+                displayParameters: ["Engine_rpm", "fuel_level", "Coolant_temp", "oil_Pressure", "engine_h", "def_level"],
+                parameters: {}
+              };
+            }
+
+            const device = devicesData[deviceID];
+            device.status = data.Engine_status === "ON" ? "Online" : "Offline";
+            device.lat = parseFloat(data.lat) || device.lat;
+            device.lon = parseFloat(data.lon) || device.lon;
+            device.machine_model = data.machine_model || device.machine_model;
+            device.machine_type = data.machine_type || device.machine_type;
+            device.firmware = data.ESP_firmware || device.firmware;
+            device.lastUpdate = new Date();
+            device.parameters = {
+              Engine_status: data.Engine_status, Engine_rpm: data.Engine_rpm, fuel_level: data.fuel_level,
+              def_level: data.def_level, Coolant_temp: data.Coolant_temp, oil_Pressure: data.oil_Pressure,
+              wifi: data.wif, engine_h: data.engine_h, idle_h: data.idle_h, work_h: data.work_h,
+              travel_h: data.travel_h, vibration_h: data.vibration_h, heating_h: data.heating_h,
+              tamper_h: data.tamper_h, battery: data.battery, sd_free_mb: data.sd_free_mb,
+              sd_free_pc: data.sd_free_pc, Vin_number: data.Vin_number, engine_dtc: data.engine_dtc,
+              ttc_dtc: data.ttc_dtc, time: data.time
+            };
+
+            updateDeviceList();
+            updateMapMarkers();
+            if (currentDevice?.id === deviceID) {
+              currentDevice = device;
+              updateVehicleParametersDisplay();
+              updateDetailStatus();
+              updateDiagnosticData();
+              if (detailMap && device.lat && device.lon) {
+                detailMap.panTo([device.lat, device.lon]);
+                deviceMarkers[deviceID + '_detail']?.setLatLng([device.lat, device.lon]);
+              }
+            }
+          } catch (err) { console.error("MQTT error:", err); }
+        };
+
+        mqttClient.onConnectionLost = (resp) => {
+          if (resp.errorCode !== 0) {
+            document.getElementById("mqtt-status").className = "mqtt-status disconnected";
+            document.getElementById("mqtt-indicator").className = "status-indicator status-offline";
+            document.getElementById("mqtt-text").textContent = "MQTT Disconnected";
+            setTimeout(connectMQTT, 5000);
+          }
+        };
+
+        function connectMQTT() {
+          mqttClient.connect({
+            onSuccess: () => {
+              document.getElementById("mqtt-status").className = "mqtt-status connected";
+              document.getElementById("mqtt-indicator").className = "status-indicator status-online";
+              document.getElementById("mqtt-text").textContent = "MQTT Connected";
+              mqttClient.subscribe(MQTT_TOPIC);
+            },
+            onFailure: () => {
+              document.getElementById("mqtt-status").className = "mqtt-status disconnected";
+              document.getElementById("mqtt-indicator").className = "status-indicator status-offline";
+              document.getElementById("mqtt-text").textContent = "Connection Failed";
+              setTimeout(connectMQTT, 5000);
+            },
+            useSSL: true, timeout: 10, cleanSession: true, keepAliveInterval: 60
+          });
+        }
+        connectMQTT();
+
+        const greetingSpan = document.getElementById("greeting-span");
+        const currentHour = new Date().getHours();
+        greetingSpan.textContent = `${currentHour < 12 ? "Good morning" : currentHour < 17 ? "Good afternoon" : "Good evening"}, User`;
+
+        function updateDeviceList() {
+          const deviceListBody = document.getElementById("device-list-body");
+          deviceListBody.innerHTML = "";
+          const devices = Object.values(devicesData);
+          if (devices.length === 0) {
+            deviceListBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">⏳ Waiting for devices...</td></tr>';
+            return;
+          }
+          devices.forEach((device) => {
+            const row = document.createElement("tr");
+            row.className = "bg-gray-800 border-b border-gray-700 hover:bg-gray-600 cursor-pointer";
+            const engineHours = device.parameters.engine_h?.toFixed(2) || 'N/A';
+            const statusClass = device.status === "Online" ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300";
+            const statusIndicator = device.status === "Online" ? '<span class="status-indicator status-online"></span>' : '<span class="status-indicator status-offline"></span>';
+            row.innerHTML = `
+              <td class="px-4 py-3 font-medium text-white">${device.machine_model}</td>
+              <td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass}">${statusIndicator}${device.status}</span></td>
+              <td class="px-4 py-3">${engineHours}</td>
+              <td class="px-4 py-3"><button data-device-id="${device.id}" class="more-info-btn font-medium text-indigo-400 hover:underline">More Info</button></td>`;
+            deviceListBody.appendChild(row);
+          });
+        }
+
+        function initOverviewMap() {
+          if (overviewMap) overviewMap.remove();
+          overviewMap = L.map("map").setView([22.2587, 71.1924], 6);
+          L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { attribution: "&copy; OpenStreetMap" }).addTo(overviewMap);
+        }
+
+        function updateMapMarkers() {
+          Object.values(devicesData).forEach((device) => {
+            if (!device.lat || !device.lon) return;
+            const markerId = device.id + '_overview';
+            if (deviceMarkers[markerId]) {
+              deviceMarkers[markerId].setLatLng([device.lat, device.lon]);
+            } else {
+              deviceMarkers[markerId] = L.marker([device.lat, device.lon]).addTo(overviewMap)
+                .bindPopup(`<b>${device.machine_model}</b><br>Status: ${device.status}`);
+            }
+          });
+        }
+
+        function initDetailMap(lat, lon) {
+          if (detailMap) detailMap.remove();
+          detailMap = L.map("detail-map").setView([lat, lon], 13);
+          L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png").addTo(detailMap);
+          deviceMarkers[currentDevice.id + '_detail'] = L.marker([lat, lon]).addTo(detailMap);
+          setTimeout(() => detailMap.invalidateSize(), 100);
+        }
+
+        document.getElementById("device-list-body").addEventListener("click", (e) => {
+          if (e.target.classList.contains("more-info-btn")) {
+            currentDevice = devicesData[e.target.dataset.deviceId];
+            if (currentDevice) showDeviceDetail();
+          }
+        });
+
+        document.getElementById("profile-btn").addEventListener("click", () =>
+          document.getElementById("profile-dropdown").classList.toggle("hidden")
+        );
+
+        document.getElementById("back-to-overview-btn").addEventListener("click", () => {
+          document.getElementById("main-title").textContent = "Global Overview";
+          document.getElementById("main-subtitle").textContent = "Real-time Fleet Monitoring via MQTT";
+          document.getElementById("device-detail-view").classList.add("hidden");
+          document.getElementById("global-overview").classList.remove("hidden");
+          currentDevice = null;
+          setTimeout(() => overviewMap?.invalidateSize(), 100);
+        });
+
+        document.getElementById("edit-params-btn").addEventListener("click", () => {
+          const modalParamList = document.getElementById("modal-param-list");
+          modalParamList.innerHTML = "";
+          Object.keys(currentDevice.parameters).forEach((paramName) => {
+            const isChecked = currentDevice.displayParameters.includes(paramName);
+            const li = document.createElement("li");
+            li.className = "flex items-center justify-between";
+            li.innerHTML = `<label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" data-param-name="${paramName}" class="w-4 h-4" ${isChecked ? "checked" : ""}>
+              <span>${paramName.replace(/_/g, " ")}</span></label>
+              <span class="text-xs text-gray-500">${isChecked ? "shown" : "hidden"}</span>`;
+            modalParamList.appendChild(li);
+          });
+          document.getElementById("params-modal").classList.remove("hidden");
+        });
+
+        document.getElementById("modal-close-btn").addEventListener("click", () =>
+          document.getElementById("params-modal").classList.add("hidden")
+        );
+
+        document.getElementById("modal-next-btn").addEventListener("click", () => {
+          const selected = [];
+          document.querySelectorAll('#modal-param-list input:checked').forEach((cb) =>
+            selected.push(cb.dataset.paramName)
+          );
+          currentDevice.displayParameters = selected;
+          updateVehicleParametersDisplay();
+          document.getElementById("params-modal").classList.add("hidden");
+        });
+
+        function updateVehicleParametersDisplay() {
+          const grid = document.getElementById("vehicle-params-grid");
+          grid.innerHTML = "";
+          currentDevice.displayParameters.forEach((paramName) => {
+            const value = currentDevice.parameters[paramName];
+            const formatted = (typeof value === "number") ? value.toFixed(2) : (value || 'N/A');
+            const card = document.createElement("div");
+            card.className = "bg-gray-700 p-3 rounded";
+            card.innerHTML = `<p class="text-xs text-gray-400 uppercase">${paramName.replace(/_/g, " ")}</p><p class="text-2xl font-bold text-white">${formatted}</p>`;
+            grid.appendChild(card);
+          });
+        }
+
+        function updateDetailStatus() {
+          const statusEl = document.getElementById("detail-status");
+          statusEl.textContent = currentDevice.status;
+          statusEl.className = currentDevice.status === "Online" ? "text-green-400 font-bold" : "text-red-400 font-bold";
+          const sdUsed = 100 - (currentDevice.parameters.sd_free_pc || 0);
+          document.getElementById("detail-space").textContent = `${sdUsed.toFixed(1)}% used`;
+          document.getElementById("detail-free-space").textContent = (currentDevice.parameters.sd_free_mb || 0).toFixed(2);
+          document.getElementById("detail-sd-usage").textContent = `${sdUsed.toFixed(1)}%`;
+          document.getElementById("detail-battery").textContent = (currentDevice.parameters.battery || 0).toFixed(2) + "V";
+          document.getElementById("detail-last-sync").textContent = currentDevice.parameters.time || currentDevice.lastUpdate.toLocaleString();
+          document.getElementById("detail-last-location").textContent = `${currentDevice.lat.toFixed(6)}, ${currentDevice.lon.toFixed(6)}`;
+        }
+
+        function updateDiagnosticData() {
+          document.getElementById("engine-dtc").textContent = currentDevice.parameters.engine_dtc || "N/A";
+          document.getElementById("ttc-dtc").textContent = currentDevice.parameters.ttc_dtc || "N/A";
+          document.getElementById("wifi-status").textContent = currentDevice.parameters.wifi ? "Connected" : "Disconnected";
+          document.getElementById("idle-hours").textContent = (currentDevice.parameters.idle_h || 0).toFixed(1) + " h";
+          document.getElementById("work-hours").textContent = (currentDevice.parameters.work_h || 0).toFixed(1) + " h";
+          document.getElementById("travel-hours").textContent = (currentDevice.parameters.travel_h || 0).toFixed(1) + " h";
+          document.getElementById("vibration-hours").textContent = (currentDevice.parameters.vibration_h || 0).toFixed(1) + " h";
+          document.getElementById("heating-hours").textContent = (currentDevice.parameters.heating_h || 0).toFixed(1) + " h";
+          document.getElementById("tamper-hours").textContent = (currentDevice.parameters.tamper_h || 0).toFixed(1) + " h";
+        }
+
+        function showDeviceDetail() {
+          document.getElementById("main-title").textContent = `Live Data for ${currentDevice.machine_model}`;
+          document.getElementById("main-subtitle").textContent = `Real-time telemetry for ${currentDevice.serial}`;
+          const imageMap = {
+            AP550: "/static/images/ap550.png", ARX90_2: "/static/images/arx90_2.png",
+            AP600: "/static/images/ap600.png", ARS110_2: "/static/images/ars110_2.png",
+            WM6: "/static/images/wm6.png", AP1000: "/static/images/ap1000.png",
+            ARX32_2: "/static/images/arx32.2.png"
+          };
+          document.getElementById("vehicle-image").src = imageMap[currentDevice.machine_model] ||
+            "https://via.placeholder.com/400x300.png/1F2937/FFFFFF?text=" + encodeURIComponent(currentDevice.machine_model);
+          document.getElementById("global-overview").classList.add("hidden");
+          document.getElementById("device-detail-view").classList.remove("hidden");
+          document.getElementById("machine-name-display").textContent = currentDevice.machine_model;
+          document.getElementById("machine-type-display").textContent = currentDevice.machine_type;
+          document.getElementById("detail-logger-title").textContent = `${currentDevice.serial} Status`;
+          document.getElementById("detail-firmware").textContent = currentDevice.firmware;
+          document.getElementById("detail-vin").textContent = currentDevice.parameters.Vin_number || 'N/A';
+          updateDetailStatus();
+          updateVehicleParametersDisplay();
+          updateDiagnosticData();
+          initDetailMap(currentDevice.lat, currentDevice.lon);
+        }
+
+        initOverviewMap();
+        updateDeviceList();
+        setInterval(updateDeviceList, 30000);
+      });
+    </script>
+
+    <button id="ai-toggle-btn" onclick="toggleAiSidebar()">
+      <svg style="width:24px;height:24px;stroke-width:2;color:white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    </button>
+
+    <div id="ai-sidebar">
+      <div class="ai-header">
+        <div style="display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:white">Fleet Advisor AI</div>
+        <button onclick="toggleAiSidebar()" style="background:none;border:none;color:#9ca3af;font-size:24px;cursor:pointer">&times;</button>
+      </div>
+      <div id="ai-chat-box">
+        <div class="message ai-msg">Hello! I'm your Fleet Assistant. Ask me about diagnostics, maintenance, or machine status.</div>
+        <div class="typing-indicator" id="typing-indicator">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+      <div class="ai-input-area">
+        <input type="text" id="ai-input" placeholder="Ask about machine status..." onkeypress="if(event.key==='Enter')sendMessage()">
+        <button onclick="sendMessage()" style="background:#4f46e5;border:none;border-radius:8px;padding:12px;cursor:pointer">
+          <svg style="width:20px;height:20px;stroke:white;stroke-width:2" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const GEMINI_API_KEY = "AIzaSyBpPJU923ylerfGPfYhgWPOeoyJY_wvDVg";
+      function toggleAiSidebar() {
+        document.getElementById('ai-sidebar').classList.toggle('open');
+      }
+      function appendMessage(text, sender) {
+        const div = document.createElement('div');
+        div.classList.add('message', sender === 'user' ? 'user-msg' : 'ai-msg');
+        div.innerHTML = text;
+        document.getElementById('ai-chat-box').insertBefore(div, document.getElementById('typing-indicator'));
+        document.getElementById('ai-chat-box').scrollTop = document.getElementById('ai-chat-box').scrollHeight;
+      }
+      async function sendMessage() {
+        const text = document.getElementById('ai-input').value.trim();
+        if (!text) return;
+        appendMessage(text, 'user');
+        document.getElementById('ai-input').value = '';
+        document.getElementById('typing-indicator').style.display = 'block';
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "You are a fleet management expert. Help with diagnostics and maintenance. User: " + text }] }]
+            })
+          });
+          const data = await response.json();
+          const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Error getting response.";
+          document.getElementById('typing-indicator').style.display = 'none';
+          appendMessage(aiText.replace(/\n/g, '<br>'), 'ai');
+        } catch (error) {
+          document.getElementById('typing-indicator').style.display = 'none';
+          appendMessage("Error connecting to AI.", 'ai');
+        }
+      }
+    </script>
+  </body>
+</html>

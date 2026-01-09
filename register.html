@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Telematics Dashboard</title>
+	<script src="config.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap'); body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full mx-auto">
+        <div class="bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700">
+            <h1 class="text-3xl font-bold text-white text-center mb-2">Create an Account</h1>
+            <p class="text-center text-gray-400 mb-8">Get started with your new account.</p>
+            
+            <form id="register-form" class="space-y-4">
+                <div>
+                    <label for="full-name" class="text-sm font-medium text-gray-400">Full Name</label>
+                    <input type="text" id="full-name" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                <div>
+                    <label for="email" class="text-sm font-medium text-gray-400">Email</label>
+                    <input type="email" id="email" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                 <div>
+                    <label for="company" class="text-sm font-medium text-gray-400">Company (Optional)</label>
+                    <input type="text" id="company" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                </div>
+                <div>
+                    <label for="username" class="text-sm font-medium text-gray-400">Username</label>
+                    <input type="text" id="username" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                <div>
+                    <label for="password" class="text-sm font-medium text-gray-400">Password</label>
+                    <input type="password" id="password" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                <div>
+                    <button type="submit" class="w-full mt-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg">Create Account</button>
+                </div>
+            </form>
+
+            <div id="message-box" class="mt-4 text-center text-sm"></div>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-400">Already have an account? <a href="login.html" class="font-medium text-indigo-400 hover:underline">Log In</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('register-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const messageBox = document.getElementById('message-box');
+            messageBox.textContent = '';
+            
+            const payload = {
+                full_name: document.getElementById('full-name').value,
+                email: document.getElementById('email').value,
+                company: document.getElementById('company').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+            };
+
+            fetch(`${APP_CONFIG.API_BASE_URL}/api/register`, {		//used for run in Local system
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(res => {
+                messageBox.textContent = res.body.message;
+                if (res.status === 201) {
+                    messageBox.className = 'mt-4 text-center text-sm text-green-400';
+                    setTimeout(() => { window.location.href = 'login.html'; }, 2000);
+                } else {
+                    messageBox.className = 'mt-4 text-center text-sm text-red-400';
+                }
+            })
+            .catch(error => {
+                console.error('Registration Error:', error);
+                messageBox.textContent = 'Could not connect to the server.';
+                messageBox.className = 'mt-4 text-center text-sm text-red-400';
+            });
+        });
+    </script>
+</body>
+</html>

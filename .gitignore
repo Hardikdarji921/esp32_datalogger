@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+.env
+backend.log
+
+# Node
+node_modules/
+.npm
+*.log
+.env
+
+# OS
+.DS_Store
+Thumbs.db

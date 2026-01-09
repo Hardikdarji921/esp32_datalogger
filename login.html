@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Telematics Dashboard</title>
+    <script src="config.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full mx-auto">
+        <div class="bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700">
+            <h1 class="text-3xl font-bold text-white text-center mb-2">Welcome Back!</h1>
+            <p class="text-center text-gray-400 mb-8">Sign in to continue to your dashboard.</p>
+            
+            <form id="login-form" class="space-y-6">
+				<div>
+					<label for="email" class="text-sm font-medium text-gray-400">Email Address</label>
+					<input type="email" id="email" name="email" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="you@example.com" required>
+				</div>
+                
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="password" class="text-sm font-medium text-gray-400">Password</label>
+                        <a href="forgot_password.html" class="text-sm text-indigo-400 hover:underline">Forgot password?</a>
+                    </div>
+                    <input type="password" id="password" name="password" class="mt-1 w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-indigo-500 focus:border-indigo-500" placeholder="••••••••" required>
+                </div>
+
+                <div>
+                    <button type="submit" class="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition duration-150 shadow-lg">
+                        Login
+                    </button>
+                </div>
+            </form>
+
+            <div id="error-message" class="mt-4 text-center text-red-400 text-sm"></div>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-400">
+                    Don't have an account? <a href="register.html" class="font-medium text-indigo-400 hover:underline">Sign up</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+// Replace the existing script in login.html with this aligned version
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('login-form');
+    // Corrected: Select by 'email' ID
+    const emailInput = document.getElementById('email'); 
+    const passwordInput = document.getElementById('password');
+    const errorMessage = document.getElementById('error-message');
+
+    loginForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        errorMessage.textContent = '';
+
+        // Corrected: Send 'email' instead of 'username'
+        fetch(`${APP_CONFIG.API_BASE_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: emailInput.value, 
+                password: passwordInput.value,
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.token) {
+                localStorage.setItem('token', data.token);
+                window.location.href = 'HomePage.html';
+            } else {
+                errorMessage.textContent = data.message || 'An unknown error occurred.';
+            }
+        })
+        .catch(error => {
+            errorMessage.textContent = 'Could not connect to the server.';
+        });
+    });
+});
+    </script>
+</body>
+</html>
