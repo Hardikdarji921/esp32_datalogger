@@ -471,9 +471,9 @@ def get_files_in_folder(current_user, folder_id):
     files = [{'id': f.id, 'name': f.name, 'size': f.size, 'modified': f.modified} for f in folder.files]
     return jsonify(files)
 
-#if __name__ == "__main__":
- app = app
+if __name__ == "__main__":
     with app.app_context():
         db.create_all()
 
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+
