@@ -6,7 +6,7 @@
 // To run locally: set environment = 'local'
 // To run on Render: set environment = 'production'
 //
-const environment = 'local'; // <-- EDIT THIS LINE
+const environment = 'production'; // <-- EDIT THIS LINE
 // -----------------------------------------------------------------
 
 const configs = {
@@ -22,3 +22,4 @@ const configs = {
 
 // This line automatically selects the correct URLs based on your choice above.
 const APP_CONFIG = configs[environment];
+
