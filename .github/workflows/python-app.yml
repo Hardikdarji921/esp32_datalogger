@@ -1,0 +1,49 @@
+name: Python Application Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      # If you are using a local Postgres for testing, you'd define it here.
+      # For now, we will test the Flask environment setup.
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: Hardik@123
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flask flask-cors flask-sqlalchemy flask-mail flask-socketio flask-migrate flask-jwt-extended pyjwt werkzeug supabase
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Initialize Database and Run Lint
+      env:
+        # Mocking the database URI for the test runner
+        SQLALCHEMY_DATABASE_URI: sqlite:///:memory:
+      run: |
+        # This checks if your app.py is free of syntax errors
+        python -m py_compile app.py
+        # Runs your init script to ensure DB models are valid
+        python init_db.py
